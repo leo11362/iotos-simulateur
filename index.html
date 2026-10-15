@@ -407,6 +407,7 @@ footer { color: var(--muted); font-size: 13px; max-width: 96ch; }
             <a href="#g-web">Pages web et AJAX</a>
             <a href="#g-depannage">Dépannage</a>
             <a href="#g-pieges">À savoir (limites)</a>
+            <a href="#g-pistes">Pistes d'amélioration</a>
             <a href="#g-libs">Bibliothèques et licences</a>
             <a href="#g-simu">Ce que fait le simulateur</a>
             <a href="#g-apropos">À propos du projet</a>
@@ -700,6 +701,24 @@ Date ;Heure ; Etat Led
               <li><strong>Pas de formatage de carte :</strong> <code>FormatSD</code> est déclarée mais « non implémentée dans cette version ». Le watchdog, l'envoi de mails, l'OTA et le reset matériel (bouton D3) sont notés « off » dans les commentaires.</li>
               <li><strong>Un seul client FTP à la fois</strong> est géré : limite à 1 connexion dans FileZilla.</li>
             </ul>
+
+            <h2 id="g-pistes">Pistes d'amélioration</h2>
+            <p>Ce sont des propositions issues de la lecture du code, pas des défauts constatés sur la carte. Elles gardent l'esprit d'IoToS (simple, tenir dans un UNO R4) et corrigent les points relevés plus haut.</p>
+            <div class="tbl"><table>
+              <thead><tr><th>Piste</th><th>Pourquoi</th><th>Comment</th></tr></thead>
+              <tbody>
+                <tr><td>Refuser une IP mal écrite</td><td><code>ip 192.168.0</code> devient 0.0.0.0 sans erreur.</td><td>Vérifier le résultat de la conversion et afficher un message d'erreur sans modifier la RAM.</td></tr>
+                <tr><td>Corriger le test de l'IP</td><td>Dans le Driver Ethernet, <code>conf.ip[3] != 255 || conf.ip[3] != 0</code> est toujours vrai : l'erreur « IP erreur » ne s'affiche jamais.</td><td>Remplacer le <code>||</code> par un <code>&amp;&amp;</code>.</td></tr>
+                <tr><td>Verrouiller <code>defaults</code></td><td>Il remet les valeurs d'usine, mot de passe compris, même quand le CLI est verrouillé.</td><td>Ajouter le même test de login que les autres commandes sensibles.</td></tr>
+                <tr><td>Ne plus afficher les mots de passe</td><td><code>print</code> montre les mots de passe du CLI et du FTP en clair.</td><td>Les remplacer par des étoiles, ou ne les afficher qu'en Série.</td></tr>
+                <tr><td>Renommer l'alias <code>pass</code></td><td>On croit régler un mot de passe, on change la passerelle.</td><td>Retirer l'alias de la table des commandes.</td></tr>
+                <tr><td>Corriger <code>edit</code></td><td>Il écrase le début du fichier au lieu d'ajouter ou de remplacer tout le contenu.</td><td>Ouvrir le fichier en ajout ou le tronquer avant d'écrire.</td></tr>
+                <tr><td>Rendre <code>ping</code> non bloquant</td><td>Pendant les 4 secondes du ping, le site web ne répond pas.</td><td>Envoyer un paquet par passage de <code>loop()</code> avec un compteur au lieu d'attendre.</td></tr>
+                <tr><td>DNS réglable</td><td>1.1.1.1 est écrit en dur.</td><td>Ajouter un champ DNS dans la structure de configuration et une commande <code>dns</code>.</td></tr>
+                <tr><td>Aide cohérente</td><td>Le texte d'aide donne la MAC <code>…:ED</code>, le code utilise <code>…:B1</code>.</td><td>Aligner le texte sur la valeur du code.</td></tr>
+                <tr><td>Limiter les essais de login</td><td>Le délai qui double n'empêche pas d'essayer indéfiniment.</td><td>Bloquer le login après N erreurs jusqu'à un <code>reset</code>.</td></tr>
+              </tbody>
+            </table></div>
 
             <h2 id="g-libs">Bibliothèques et licences</h2>
             <div class="tbl"><table>
