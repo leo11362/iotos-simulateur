@@ -1,0 +1,1982 @@
+<title>Simulateur IoToS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=Cousine:wght@400;700&family=Orbitron:wght@500;700&family=Exo+2:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Concept : le vrai IoToS a l'ecran. Une fenetre KiTTY noire, puis le navigateur sur la page web de la carte, puis un guide ecrit d'apres le code source. Autour, un fond clair neutre. */
+:root {
+  --bg: #e9edf0;
+  --surface: #f6f8fa;
+  --fg: #16202a;
+  --muted: #55636f;
+  --line: #ccd5dc;
+  --accent: #0b6fd0;
+  --warn-bg: #fff4dc;
+  --warn-line: #e5b84a;
+  --code-bg: #e3e9ee;
+  --f-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --f-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'Cousine', 'Courier New', ui-monospace, monospace;
+  /* terminal et page web de la carte : toujours sombres, comme sur la vraie carte */
+  --k-bg: #000000;
+  --k-fg: #c6c6c6;
+  --k-red: #e8302e;
+  --k-green: #1fd61f;
+  --k-bar: #1b73d1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1217; --surface: #151c23; --fg: #e5ecf2; --muted: #92a1ae; --line: #27323c; --accent: #5aa8ff;
+    --warn-bg: #2a2412; --warn-line: #8a6d1f; --code-bg: #1d2731;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1217; --surface: #151c23; --fg: #e5ecf2; --muted: #92a1ae; --line: #27323c; --accent: #5aa8ff;
+  --warn-bg: #2a2412; --warn-line: #8a6d1f; --code-bg: #1d2731;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.55; margin: 0; }
+.page {
+  max-width: 1120px; margin: 0 auto;
+  padding-block: 26px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(34px, 6vw, 52px); line-height: 1; margin: 0; }
+h1 span { color: var(--accent); }
+.sub { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.notice { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; color: var(--muted); font-size: 14px; max-width: 96ch; }
+.notice strong { color: var(--fg); font-weight: 600; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code { font-family: var(--f-mono); font-size: 0.92em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  font: 500 14px var(--f-body); color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 8px 8px 0 0; border-bottom: 0;
+  padding: 9px 16px; cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--surface); color: var(--fg); border-color: var(--line); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pane { min-width: 0; }
+
+/* Barre de connexion */
+.conn { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-bottom: 10px; font-size: 13.5px; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: 500 13px var(--f-body); background: transparent; color: var(--muted); border: 0; padding: 7px 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.conn label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.conn input[type=checkbox] { accent-color: var(--accent); }
+.lost { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--fg); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; margin-bottom: 10px; }
+
+/* Fenetre KiTTY */
+.win { border: 1px solid #1b73d1; background: var(--k-bg); }
+.win-bar { background: var(--k-bar); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font: 13px var(--f-body); }
+.win-bar .ttl { display: flex; align-items: center; gap: 8px; }
+.win-ico { width: 14px; height: 14px; border: 2px solid #fff; border-radius: 3px; display: inline-block; }
+.win-btns { display: flex; gap: 22px; font-size: 14px; }
+.screen {
+  height: 620px; overflow: auto; padding: 8px 10px 14px;
+  background: var(--k-bg); color: var(--k-fg);
+  font-family: var(--f-mono); font-size: 13px; line-height: 1.28;
+  scrollbar-color: #555 #111;
+}
+#out { width: max-content; min-width: 100%; }
+.ln { white-space: pre; min-height: 1.28em; }
+.r { color: var(--k-red); }
+.h { color: var(--k-green); }
+.bad { background: #c4302b; color: #fff; }
+.prompt { display: flex; align-items: center; min-width: 100%; width: max-content; }
+.prompt .ps { white-space: pre; }
+.prompt input {
+  background: transparent; border: 0; outline: 0; color: var(--k-fg); font: inherit;
+  caret-color: #19ff19; caret-shape: block; width: 60ch; padding: 0;
+}
+.prompt input:disabled { opacity: 0.4; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { font: 12px var(--f-mono); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip:disabled { opacity: 0.45; cursor: default; }
+.chip.ghost { background: transparent; color: var(--muted); }
+
+/* Navigateur + page web de la carte */
+.browser { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); position: relative; }
+.b-tabs { background: #dbe3ec; padding: 8px 10px 0; display: flex; }
+.b-tab { background: #fff; color: #1a2530; font: 12px var(--f-body); padding: 7px 14px; border-radius: 8px 8px 0 0; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-bar { background: #fff; display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-bottom: 1px solid #d6dde4; color: #4b5864; font: 13px var(--f-body); }
+.b-nav { letter-spacing: 6px; color: #6b7783; }
+.b-url { flex: 1; min-width: 0; background: #e9eef6; border-radius: 999px; padding: 5px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1a2530; }
+.b-url .ns { font-weight: 600; margin-right: 10px; }
+.web {
+  background-color: #0b1726;
+  background-image: linear-gradient(rgba(0,170,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,170,255,0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  padding: 34px 14px 44px; display: flex; justify-content: center;
+  font-family: 'Exo 2', var(--f-body); color: #dbe9f6; min-height: 420px;
+}
+.wcard { width: min(500px, 100%); background: #15283d; border: 1px solid rgba(0,200,255,0.25); border-radius: 18px; box-shadow: 0 0 44px rgba(0,170,255,0.14); overflow: hidden; align-self: flex-start; }
+.whead { text-align: center; padding: 26px 18px 22px; background: linear-gradient(160deg, #10243b, #1c3b5e); border-bottom: 2px solid #12b8f0; }
+.wico { width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 50%; border: 2px solid #12c0ff; background: #0f2a44; display: grid; place-items: center; box-shadow: 0 0 18px rgba(18,192,255,0.35); color: #12c0ff; font-size: 26px; }
+.wh1 { font-family: 'Orbitron', var(--f-body); font-weight: 700; font-size: clamp(34px, 9vw, 58px); line-height: 1.1; color: #00c3ff; margin: 6px 0 4px; letter-spacing: 0.04em; text-shadow: 0 0 22px rgba(0,195,255,0.35); }
+.wh1.sm { font-size: clamp(24px, 6.5vw, 38px); }
+.wsub { letter-spacing: 0.22em; color: #6f9cc0; font-size: clamp(12px, 3.6vw, 18px); font-weight: 500; text-transform: uppercase; }
+.wpill { display: inline-block; margin-top: 14px; font-family: 'Orbitron', var(--f-body); font-weight: 500; font-size: 24px; color: #19c8ff; padding: 6px 22px; border-radius: 999px; border: 1px solid rgba(0,200,255,0.35); background: rgba(0,160,220,0.12); }
+.wbody { padding: 22px 24px 18px; display: flex; flex-direction: column; gap: 14px; }
+.sec { display: flex; align-items: center; gap: 12px; color: #6f9cc0; font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; }
+.sec::before, .sec::after { content: ''; flex: 1; height: 1px; background: rgba(111,156,192,0.3); }
+.state { display: flex; align-items: center; gap: 12px; border-radius: 12px; padding: 12px 14px; background: #161f2d; border: 1px solid rgba(255,70,70,0.4); }
+.state.on { border-color: rgba(40,220,120,0.5); }
+.state .ring { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #ff4a4a; flex: none; }
+.state.on .ring { border-color: #28dc78; background: #28dc78; box-shadow: 0 0 10px #28dc78; }
+.state .lbl { font-size: 11px; letter-spacing: 0.1em; color: #6f9cc0; text-transform: uppercase; }
+.state .val { font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: #ff4a4a; }
+.state.on .val { color: #28dc78; }
+.state .grow { flex: 1; min-width: 0; }
+.refresh { text-align: right; font-size: 11px; color: #19c8ff; min-width: 78px; }
+.refresh .bar { height: 3px; background: #223a55; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.refresh .bar i { display: block; height: 100%; width: 0; background: #19c8ff; }
+.wbtn { font: 600 16px 'Orbitron', var(--f-body); letter-spacing: 0.14em; text-transform: uppercase; border: 0; border-radius: 12px; padding: 15px; color: #08210f; cursor: pointer; width: 100%; }
+.wbtn.on { background: linear-gradient(90deg, #00c85a, #00e070); }
+.wbtn.off { background: linear-gradient(90deg, #d42b2b, #ff5050); color: #2a0606; }
+.wbtn.go { background: linear-gradient(90deg, #0a86d4, #00c8ff); color: #031a2b; }
+.wbtn:disabled { opacity: 0.55; cursor: default; }
+.wbtn:focus-visible, .wlink:focus-visible, .wsel:focus-visible, .oct button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.wfoot { border-top: 1px solid rgba(111,156,192,0.25); padding: 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 12px; color: #6f9cc0; letter-spacing: 0.06em; }
+.wlink { font: 500 12px 'Exo 2', var(--f-body); letter-spacing: 0.14em; text-transform: uppercase; color: #6faed6; background: transparent; border: 1px solid rgba(111,156,192,0.45); border-radius: 8px; padding: 9px 18px; cursor: pointer; }
+.wlink:hover { color: #19c8ff; border-color: #19c8ff; }
+.frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(111,156,192,0.18); flex-wrap: wrap; }
+.frow .fl { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #8fb2d1; font-weight: 500; }
+.wsel { background: #0d1a2b; border: 1px solid #2c4d70; color: #e6f1fb; border-radius: 8px; padding: 9px 12px; font: 600 13px 'Exo 2', var(--f-body); }
+.octs { display: flex; align-items: center; gap: 4px; }
+.oct { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+.oct button { width: 48px; height: 22px; border: 1px solid #2c4d70; border-radius: 4px; background: #1b3a5c; color: #8fb2d1; font-size: 10px; cursor: pointer; padding: 0; }
+.oct button:disabled { opacity: 0.3; cursor: default; }
+.oct .ov { width: 48px; text-align: center; font-weight: 600; font-size: 15px; padding: 5px 0; border-radius: 6px; background: #0b1726; border: 1px solid #2c4d70; color: #e6f1fb; font-variant-numeric: tabular-nums; }
+.dot { color: #19c8ff; font-weight: 700; align-self: center; }
+.warnbox { border-left: 3px solid #2c6fa0; background: #101d2e; padding: 12px 14px; font-size: 12.5px; color: #8fb2d1; border-radius: 4px; margin-top: 10px; }
+.okbox { border: 1px solid rgba(40,220,120,0.55); background: rgba(40,220,120,0.08); color: #bff3d4; padding: 14px 16px; border-radius: 10px; font-size: 14px; text-align: left; }
+.errpage { background: #fff; color: #202124; width: 100%; padding: 40px 30px; border-radius: 6px; font-family: system-ui, sans-serif; align-self: flex-start; }
+.errpage h2 { font-weight: 500; font-size: 22px; margin: 0 0 8px; }
+.errpage p { margin: 6px 0; color: #5f6368; font-size: 14px; }
+.errpage code { background: #f1f3f4; color: #5f6368; }
+.dlg-back { position: absolute; inset: 0; background: rgba(0,0,0,0.35); display: grid; place-items: start center; padding-top: 70px; z-index: 5; }
+.dlg { width: min(360px, calc(100% - 24px)); background: #fff; color: #1a2530; border-radius: 10px; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); font: 14px var(--f-body); }
+.dlg h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.dlg p { margin: 0 0 12px; color: #55636f; font-size: 13px; }
+.dlg label { display: block; font-size: 12px; color: #55636f; margin: 8px 0 3px; }
+.dlg input { width: 100%; padding: 8px 10px; border: 1px solid #b8c4cf; border-radius: 6px; font: inherit; background: #fff; color: #1a2530; }
+.dlg .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dlg button { font: 500 13px var(--f-body); padding: 8px 14px; border-radius: 6px; cursor: pointer; border: 1px solid #b8c4cf; background: #f4f6f8; color: #1a2530; }
+.dlg button.pri { background: #0b6fd0; border-color: #0b6fd0; color: #fff; }
+.dlg .bad2 { color: #c4302b; font-size: 12.5px; margin-top: 6px; min-height: 1em; }
+.envp { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13.5px; }
+.envp summary { cursor: pointer; padding: 9px 12px; color: var(--fg); font-weight: 500; }
+.envp summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.envp-body { padding: 4px 12px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 16px; }
+.envp-body label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12.5px; }
+.envp-body input { font: 13.5px var(--f-mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.envp-body input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.envp-body input[aria-invalid="true"] { border-color: #d03030; }
+.envp-body .wide { grid-column: 1 / -1; }
+.envp-body .pair { display: flex; gap: 6px; align-items: center; }
+.envp-body .pair input { flex: 1; }
+.envp-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.envp-foot button { font: 500 13px var(--f-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.envp-foot button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hw svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.hw .bx { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.hw .bx2 { fill: var(--code-bg); stroke: var(--line); stroke-width: 1.2; }
+.hw .ln { stroke: var(--accent); stroke-width: 2; fill: none; }
+.hw .led { fill: #e8a317; stroke: var(--fg); stroke-width: 1.2; }
+.hw text { fill: var(--fg); font: 13px var(--f-body); }
+.hw .t-b { font-weight: 600; }
+.hw .t-m { fill: var(--muted); font-size: 12px; }
+.hw .t-p { fill: var(--accent); font: 600 12px var(--f-mono); }
+.hw figcaption { padding: 8px 12px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+.hint { color: var(--muted); font-size: 13px; margin-top: 10px; max-width: 90ch; }
+
+/* Guide */
+.guide { background: var(--surface); border: 1px solid var(--line); border-radius: 0 10px 10px 10px; padding: clamp(16px, 3vw, 30px); }
+.g-grid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 30px; }
+.toc { position: sticky; top: 14px; align-self: start; font-size: 13.5px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 28px); overflow: auto; }
+.toc a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 6px; border-left: 2px solid transparent; }
+.toc a:hover { color: var(--fg); background: var(--code-bg); }
+.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prose { min-width: 0; max-width: 84ch; }
+.prose h2 { font-family: var(--f-display); font-size: clamp(26px, 4vw, 34px); line-height: 1.1; margin: 44px 0 10px; padding-top: 8px; scroll-margin-top: 12px; }
+.prose h2:first-child { margin-top: 0; }
+.prose h3 { font-size: 16.5px; margin: 26px 0 6px; font-weight: 600; }
+.prose p { margin: 8px 0; }
+.prose ul, .prose ol { margin: 8px 0; padding-left: 22px; }
+.prose li { margin: 3px 0; }
+.lead { font-size: 17px; color: var(--fg); }
+.tbl { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; }
+.tbl table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 520px; }
+.tbl th { text-align: left; background: var(--code-bg); font-weight: 600; padding: 8px 10px; white-space: nowrap; }
+.tbl td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.tbl td.m { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tag.lock { border-color: var(--warn-line); color: var(--fg); background: var(--warn-bg); }
+.callout { border-left: 3px solid var(--accent); background: var(--code-bg); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 14px; }
+.callout.warn { border-left-color: var(--warn-line); background: var(--warn-bg); }
+.term { background: #000; color: #c6c6c6; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.3; padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre; margin: 10px 0; }
+.term b { color: #fff; font-weight: 400; }
+.term i { color: var(--k-green); font-style: normal; }
+.term u { color: var(--k-red); text-decoration: none; }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 12px 0; }
+.flow > div { flex: 1 1 130px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 13px; }
+.flow > div b { display: block; font-family: var(--f-mono); font-size: 12px; margin-bottom: 2px; color: var(--accent); }
+.steps { counter-reset: s; list-style: none; padding-left: 0 !important; }
+.steps li { counter-increment: s; position: relative; padding-left: 34px; margin: 9px 0; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 600; display: grid; place-items: center; }
+.cmdsearch { width: 100%; max-width: 360px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; margin: 6px 0 4px; }
+.cmdsearch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tryit { font: 12px var(--f-mono); background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
+.tryit:hover { border-color: var(--accent); }
+.tryit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+footer { color: var(--muted); font-size: 13px; max-width: 96ch; }
+@media (max-width: 860px) {
+  .g-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .toc { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; gap: 4px; }
+  .toc a { border: 1px solid var(--line); }
+}
+@media (max-width: 600px) {
+  .screen { height: 70vh; min-height: 440px; font-size: 12px; }
+  .prompt input { font-size: 16px; }
+  .win-btns { gap: 14px; }
+  .wbody { padding: 18px 14px 14px; }
+}
+</style>
+
+<div class="page">
+  <header>
+    <h1>Io<span>T</span>oS</h1>
+    <p class="sub">Le micro-OS pour Arduino UNO R4, tel qu'il s'affiche : démarrage, commandes, page web de la carte, et un guide qui explique comment tout fonctionne.</p>
+  </header>
+
+  <div class="notice">
+    <strong>Maquette, pas le vrai firmware.</strong> Les textes, les menus et le comportement des commandes sont repris du code source d'IoToS v72 (Shell, ServeurWEB, utils, Driver Ethernet, programme principal). Le terminal reprend aussi la bibliothèque CmdLine v20 (Tab, historique, « Invalid command »). Ce qui n'est dans aucun code est approximé : les adresses des machines du réseau et les temps de réponse du réseau. IoToS est l'œuvre de Jean-Marc Biechy (GNU LGPL v2.1) : <a href="http://iotos.dsmynas.org/" target="_blank" rel="noopener">site du projet</a>.
+  </div>
+
+  <div>
+    <div class="tabs" role="tablist" aria-label="Vue">
+      <button class="tab" role="tab" id="tabT" aria-selected="true" aria-controls="paneT">Terminal (Putty / KiTTY)</button>
+      <button class="tab" role="tab" id="tabW" aria-selected="false" aria-controls="paneW" tabindex="-1">Page web de la carte</button>
+      <button class="tab" role="tab" id="tabG" aria-selected="false" aria-controls="paneG" tabindex="-1">Guide IoToS</button>
+    </div>
+
+    <section class="pane" id="paneT" role="tabpanel" aria-labelledby="tabT">
+      <div class="conn">
+        <span id="connLbl">Connexion :</span>
+        <span class="seg" role="group" aria-labelledby="connLbl">
+          <button type="button" id="mSerial" aria-pressed="true">Série USB (115200)</button>
+          <button type="button" id="mTelnet" aria-pressed="false">Telnet :23</button>
+        </span>
+        <label><input type="checkbox" id="oSd" checked> Carte SD présente</label>
+        <label><input type="checkbox" id="oWan" checked> Internet disponible</label>
+        <span>(pris en compte au prochain démarrage : tape <code>reset</code>)</span>
+      </div>
+      <details class="envp" id="envp">
+        <summary>Réglages de la carte simulée (SD, DHCP, ping…)</summary>
+        <div class="envp-body">
+          <label>Taille de la carte SD (Mo)<input id="eSd" inputmode="numeric" value="14832"></label>
+          <label>Taille d'un cluster (octets)<input id="eCl" inputmode="numeric" value="8192"></label>
+          <label>RAM disponible (octets)<input id="eRam" inputmode="numeric" value="17747"></label>
+          <label>IP donnée par le DHCP<input id="eDhcp" value=""></label>
+          <label>Passerelle donnée par le DHCP<input id="eDgw" value="192.168.0.254"></label>
+          <label>IP renvoyée pour www.google.com<input id="eGoo" value="142.251.152.119"></label>
+          <label class="wide">Date de compilation (affichée par la commande version)<input id="eComp" value="Apr  9 2026 : 21:14:03"></label>
+          <label>Ping réseau local (ms, min / max)<span class="pair"><input id="eLmin" inputmode="numeric" value="0" aria-label="minimum"><input id="eLmax" inputmode="numeric" value="3" aria-label="maximum"></span></label>
+          <label>Ping Internet (ms, min / max)<span class="pair"><input id="eWmin" inputmode="numeric" value="9" aria-label="minimum"><input id="eWmax" inputmode="numeric" value="38" aria-label="maximum"></span></label>
+          <label>Paquets perdus (%)<input id="eLoss" inputmode="numeric" value="0"></label>
+          <label class="wide">Machines qui répondent toujours au ping (IP séparées par des virgules)<input id="eUp" placeholder="ex : 192.168.0.1, 192.168.0.50"></label>
+          <label class="wide">Machines qui ne répondent jamais<input id="eDown" placeholder="ex : 192.168.0.99"></label>
+          <div class="envp-foot"><button type="button" id="eReset">Valeurs d'origine</button><span>Effet immédiat, sauf l'IP DHCP et la passerelle DHCP : elles servent au prochain démarrage (<code>reset</code>).</span></div>
+        </div>
+      </details>
+      <div class="lost" id="lost" hidden>Connexion Telnet coupée : la carte redémarre. Attends quelques secondes puis reconnecte-toi avec le bouton « Telnet :23 ».</div>
+      <div class="win">
+        <div class="win-bar"><span class="ttl"><span class="win-ico"></span>- KiTTY</span><span class="win-btns" aria-hidden="true"><span>&ndash;</span><span>&#9633;</span><span>&times;</span></span></div>
+        <div class="screen" id="screen">
+          <div id="out" role="log" aria-label="Sortie du terminal"></div>
+          <form class="prompt" id="cmd" autocomplete="off">
+            <label class="sr" for="in">Commande IoToS</label>
+            <span class="ps">&gt; </span>
+            <input id="in" type="text" spellcheck="false" autocapitalize="off" autocorrect="off">
+          </form>
+        </div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="hint">Tab complète une commande (Tab encore pour faire défiler les choix), les flèches haut et bas rappellent les 10 dernières commandes. Les commandes marchent comme sur la carte : rien n'est gardé après <code>reset</code> si tu n'as pas tapé <code>save</code>.</p>
+    </section>
+
+    <section class="pane" id="paneW" role="tabpanel" aria-labelledby="tabW" hidden>
+      <div class="browser" id="browser">
+        <div class="b-tabs"><span class="b-tab" id="bTitle">Arduino — Commande WEB</span></div>
+        <div class="b-bar"><span class="b-nav" aria-hidden="true">&larr; &rarr; &#8635;</span><span class="b-url"><span class="ns">&#9888; Non sécurisé</span><span id="bUrl">192.168.0.15</span></span></div>
+        <div class="web">
+          <div class="wcard" id="viewLed">
+            <div class="whead">
+              <div class="wico" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="#f4c542" stroke="#1a2530" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+              <div class="wh1">PRISE IP</div>
+              <div class="wsub">Arduino UNO R4 Ethernet</div>
+              <div class="wpill">IoToS</div>
+            </div>
+            <div class="wbody">
+              <div class="sec">État LED — temps réel AJAX</div>
+              <div class="state" id="wState">
+                <span class="ring"></span>
+                <div class="grow"><div class="lbl">État réel LED Arduino</div><div class="val" id="wVal">ÉTEINTE</div></div>
+                <div class="refresh"><span id="wRef">Actu dans 10s</span><div class="bar"><i id="wBar"></i></div></div>
+              </div>
+              <div class="sec">Commande</div>
+              <button class="wbtn on" id="bOn" type="button">● Allumer</button>
+              <button class="wbtn off" id="bOff" type="button">○ Éteindre</button>
+            </div>
+            <div class="wfoot"><span id="wLoaded">Chargé à --:--:--</span><button class="wlink" id="bConf" type="button">⚙ Configuration IP</button></div>
+          </div>
+
+          <div class="wcard" id="viewConf" hidden>
+            <div class="whead">
+              <div class="wico" aria-hidden="true">⚙</div>
+              <div class="wh1 sm">CONFIGURATION IP</div>
+              <div class="wsub">Arduino UNO R4 Ethernet</div>
+              <div class="wpill">IoToS</div>
+            </div>
+            <div class="wbody" id="confForm">
+              <div class="sec">Mode réseau</div>
+              <div class="frow"><span class="fl">Mode IP</span><select class="wsel" id="fMode" aria-label="Mode IP"><option value="static">■ Statique</option><option value="dhcp">■ DHCP</option></select></div>
+              <div class="sec">Adresses IP</div>
+              <div class="frow"><span class="fl">Adresse IP</span><div class="octs" id="oIp"></div></div>
+              <div class="frow"><span class="fl">Masque S/R</span><div class="octs" id="oMask"></div></div>
+              <div class="frow"><span class="fl">Passerelle</span><div class="octs" id="oGw"></div></div>
+              <div class="sec">Options</div>
+              <div class="frow"><span class="fl">Web login protection</span><select class="wsel" id="fAuth" aria-label="Web login protection"><option value="off">■ STOP</option><option value="on">■ START</option></select></div>
+              <div class="warnbox">⚠ Après validation, patientez ~20 secondes — l'Arduino redémarre pour appliquer les nouveaux paramètres réseau.</div>
+              <button class="wbtn go" id="bSave" type="button">✓ Valider la configuration</button>
+            </div>
+            <div class="wbody" id="confDone" hidden>
+              <div class="okbox" id="confMsg"></div>
+            </div>
+            <div class="wfoot"><button class="wlink" id="bBack" type="button">← Retour commande LED</button></div>
+          </div>
+
+          <div class="errpage" id="viewErr" hidden>
+            <h2 id="errT">Cette page ne fonctionne pas</h2>
+            <p id="errP"></p>
+            <p><code id="errC"></code></p>
+          </div>
+        </div>
+        <div class="dlg-back" id="dlgBack" hidden>
+          <form class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT">
+            <h3 id="dlgT">Connexion requise</h3>
+            <p>Le site <span id="dlgHost">192.168.0.15</span> demande un nom d'utilisateur et un mot de passe (realm « Secure »).</p>
+            <label for="dlgU">Nom d'utilisateur</label><input id="dlgU" autocomplete="off">
+            <label for="dlgP">Mot de passe</label><input id="dlgP" type="password" autocomplete="off">
+            <div class="bad2" id="dlgE" role="alert"></div>
+            <div class="row"><button type="button" id="dlgCancel">Annuler</button><button type="submit" class="pri">Se connecter</button></div>
+          </form>
+        </div>
+      </div>
+      <p class="hint" id="webHint">Chaque clic dans cette page envoie une vraie requête à la carte : regarde le terminal, IoToS y écrit « Nouveau Client connecte » et les en-têtes reçus. Par défaut, le login web est désactivé ; active-le avec <code>loginWEB on</code> (identifiants de départ : <code>user</code> / <code>pass</code>).</p>
+    </section>
+
+    <section class="pane" id="paneG" role="tabpanel" aria-labelledby="tabG" hidden>
+      <div class="guide">
+        <div class="g-grid">
+          <nav class="toc" aria-label="Sommaire du guide">
+            <a href="#g-quoi">C'est quoi IoToS</a>
+            <a href="#g-os">Pourquoi « OS »</a>
+            <a href="#g-materiel">Matériel et câblage</a>
+            <a href="#g-demarrage">Démarrage et boucle</a>
+            <a href="#g-services">Les services</a>
+            <a href="#g-commandes">Toutes les commandes</a>
+            <a href="#g-scenarios">Pas à pas</a>
+            <a href="#g-terminal">Régler le terminal</a>
+            <a href="#g-eeprom">Configuration et EEPROM</a>
+            <a href="#g-web">Pages web et AJAX</a>
+            <a href="#g-depannage">Dépannage</a>
+            <a href="#g-pieges">À savoir (limites)</a>
+            <a href="#g-libs">Bibliothèques et licences</a>
+            <a href="#g-simu">Ce que fait le simulateur</a>
+            <a href="#g-apropos">À propos du projet</a>
+          </nav>
+
+          <div class="prose">
+            <h2 id="g-quoi">C'est quoi IoToS</h2>
+            <p class="lead">IoToS (« Internet of Things Operating System ») est un micro-système d'exploitation pour <strong>Arduino UNO R4 Minima</strong> avec un <strong>Ethernet Shield 2</strong>. Il transforme la carte en petite « prise IP » pilotable de trois façons : par une ligne de commande, par une page web et par FTP.</p>
+            <p>Concrètement, tu branches la carte au réseau et tu obtiens, sans rien programmer :</p>
+            <ul>
+              <li>une <strong>ligne de commande</strong> façon MS-DOS, en USB (Série) ou à distance (Telnet, port 23) ;</li>
+              <li>un <strong>site web</strong> (port 80) pour allumer et éteindre une LED ou un relais, et pour régler l'adresse IP ;</li>
+              <li>un <strong>serveur FTP</strong> (port 21) pour déposer et récupérer des fichiers sur la carte SD ;</li>
+              <li>un <strong>datalogger</strong> qui note chaque ON/OFF avec la date et l'heure dans un fichier CSV lisible dans Excel ;</li>
+              <li>une <strong>horloge Internet</strong> (NTP), des outils réseau (<code>ping</code>, <code>tracert</code>, <code>netstat</code>) et une configuration qui survit aux coupures de courant (EEPROM).</li>
+            </ul>
+            <p>L'auteur est Jean-Marc Biechy (Institution Saint-Jean, école d'électronique, informatique et réseau, Colmar). Le programme fournit s'appelle <code>PriseIP_UNOR4_jsWEB_SD_FTP_LogCmdLine_IDE2_v72</code> : version 72 du « socle ». Licence GNU LGPL v2.1.</p>
+            <div class="callout">Ce guide est écrit d'après le code source fourni (fichiers <code>.ino</code>, <code>Shell_CmdLine_SD.h</code>, <code>ServeurWEB.h</code>, <code>utils.h</code>, <code>Driver_Ethernet_Reseau.h</code>). Les messages affichés sont ceux du code, orthographe comprise.</div>
+
+            <h2 id="g-os">Pourquoi on dit « OS »</h2>
+            <p>Un Arduino n'a pas de système d'exploitation : un seul programme tourne, en boucle. IoToS ajoute les briques qu'on trouve dans un vrai système, en version minuscule :</p>
+            <div class="tbl"><table>
+              <thead><tr><th>Brique d'un OS</th><th>Dans IoToS</th><th>Fichier</th></tr></thead>
+              <tbody>
+                <tr><td>Noyau (ordonnanceur)</td><td>La fonction <code>loop()</code> donne la main tour à tour à chaque service (pas de tâches parallèles : c'est un noyau « coopératif »).</td><td>.ino</td></tr>
+                <tr><td>Interpréteur de commandes</td><td>Le <em>shell</em> CLI (<code>cmdLine</code>) : historique, complétion avec Tab, login.</td><td>Shell_CmdLine_SD.h</td></tr>
+                <tr><td>Système de fichiers</td><td>Carte microSD en FAT32 (noms longs), pilotée par SdFat : <code>dir</code>, <code>type</code>, <code>copy</code>…</td><td>Shell_CmdLine_SD.h</td></tr>
+                <tr><td>Pile réseau</td><td>Ethernet W5500 : IP fixe ou DHCP, DNS, ICMP (ping), NTP.</td><td>Driver_Ethernet_Reseau.h</td></tr>
+                <tr><td>Services (démons)</td><td>Serveur WEB, serveur FTP, Telnet, datalogger.</td><td>ServeurWEB.h, .ino</td></tr>
+                <tr><td>Registre / configuration</td><td>Une structure <code>conf</code> sauvegardée dans l'EEPROM.</td><td>.ino</td></tr>
+                <tr><td>Journal de bord</td><td>Les messages de démarrage <code>[  OK  ]</code> et les logs du serveur web, sur le port Série.</td><td>utils.h</td></tr>
+              </tbody>
+            </table></div>
+
+            <h2 id="g-materiel">Matériel et câblage</h2>
+            <div class="tbl"><table>
+              <thead><tr><th>Élément</th><th>Rôle</th></tr></thead>
+              <tbody>
+                <tr><td>Arduino UNO R4 Minima</td><td>Microcontrôleur Renesas RA4M1 (Cortex-M4, 48 MHz, 5 V), 256 Ko de flash, 32 Ko de RAM, 8 Ko d'EEPROM. Le croquis utilise 161 972 octets (61 %) de flash et 16 020 octets (48 %) de RAM.</td></tr>
+                <tr><td>Arduino Ethernet Shield 2 (W5500)</td><td>Réseau câblé et lecteur de carte microSD. Le W5500 sait gérer 8 connexions (« sockets ») en même temps.</td></tr>
+                <tr><td>Carte microSD FAT32</td><td>Contient <code>index.htm</code>, <code>ConfIP.htm</code> (les pages du site) et les fichiers CSV du datalogger.</td></tr>
+                <tr><td>Module LED (Grove)</td><td>Sur la broche <strong>D5</strong> : c'est la « prise » commandée.</td></tr>
+                <tr><td>Écran LCD ST7567S (option)</td><td>128×64 en I2C (bibliothèque U8g2). Menu rotatif à 3 boutons : D8 (OK), D2 et D3 (+ et −).</td></tr>
+              </tbody>
+            </table></div>
+            <h3>Schéma de l'ensemble</h3>
+            <figure class="tbl hw" style="margin:12px 0">
+              <svg viewBox="0 0 700 290" role="img" aria-label="Schéma : la box est reliée par câble RJ45 au shield Ethernet, posé sur l'Arduino UNO R4. Le shield contient le W5500 (D10) et la carte SD (D4) sur le bus SPI D11 D12 D13. La LED est sur D5, l'écran LCD sur A4 et A5, trois boutons sur D8, D2 et D3.">
+                <rect class="bx" x="14" y="108" width="112" height="74" rx="8"/>
+                <text class="t-b" x="70" y="140" text-anchor="middle">Box</text>
+                <text class="t-m" x="70" y="160" text-anchor="middle">et Internet</text>
+                <path class="ln" d="M126 145 H168"/>
+                <text class="t-m" x="147" y="132" text-anchor="middle">RJ45</text>
+                <rect class="bx" x="168" y="14" width="344" height="262" rx="10"/>
+                <text class="t-b" x="340" y="38" text-anchor="middle">Arduino UNO R4 Minima</text>
+                <rect class="bx2" x="184" y="52" width="312" height="132" rx="8"/>
+                <text class="t-b" x="340" y="74" text-anchor="middle">Shield Ethernet 2</text>
+                <rect class="bx" x="198" y="88" width="136" height="58" rx="6"/>
+                <text x="266" y="112" text-anchor="middle">Ethernet W5500</text>
+                <text class="t-p" x="266" y="132" text-anchor="middle">CS : D10</text>
+                <rect class="bx" x="346" y="88" width="136" height="58" rx="6"/>
+                <text x="414" y="112" text-anchor="middle">Carte microSD</text>
+                <text class="t-p" x="414" y="132" text-anchor="middle">CS : D4</text>
+                <text class="t-p" x="340" y="170" text-anchor="middle">SPI partagé : D11 D12 D13</text>
+                <rect class="bx2" x="184" y="198" width="312" height="66" rx="8"/>
+                <text class="t-b" x="340" y="220" text-anchor="middle">Mémoire du microcontrôleur</text>
+                <text class="t-m" x="340" y="240" text-anchor="middle">Flash 256 Ko · RAM 32 Ko · EEPROM 8 Ko</text>
+                <text class="t-m" x="340" y="256" text-anchor="middle">(la configuration fait 297 octets)</text>
+                <path class="ln" d="M512 62 H576"/>
+                <circle class="led" cx="598" cy="62" r="13"/>
+                <text class="t-p" x="598" y="96" text-anchor="middle">D5</text>
+                <text class="t-m" x="598" y="112" text-anchor="middle">LED (la « prise »)</text>
+                <path class="ln" d="M512 154 H560"/>
+                <rect class="bx" x="560" y="130" width="124" height="48" rx="6"/>
+                <text x="622" y="152" text-anchor="middle">Écran LCD</text>
+                <text class="t-p" x="622" y="169" text-anchor="middle">I2C : A4 A5</text>
+                <path class="ln" d="M512 232 H560"/>
+                <rect class="bx" x="560" y="208" width="124" height="48" rx="6"/>
+                <text x="622" y="230" text-anchor="middle">3 boutons</text>
+                <text class="t-p" x="622" y="247" text-anchor="middle">D8 · D2 · D3</text>
+              </svg>
+              <figcaption>La SD et l'Ethernet partagent le même bus SPI : le code les active chacun leur tour grâce à leurs broches CS (Chip Select, D4 et D10). L'écran et les boutons sont optionnels.</figcaption>
+            </figure>
+            <h3>Qui utilise quelle broche</h3>
+            <div class="tbl"><table>
+              <thead><tr><th>Broche</th><th>Utilisation</th></tr></thead>
+              <tbody>
+                <tr><td class="m">D4</td><td>Chip Select de la carte SD</td></tr>
+                <tr><td class="m">D10</td><td>Chip Select du W5500 (Ethernet)</td></tr>
+                <tr><td class="m">D11, D12, D13</td><td>Bus SPI partagé (MOSI, MISO, SCK) entre SD et Ethernet</td></tr>
+                <tr><td class="m">D5</td><td>LED de la prise IP</td></tr>
+                <tr><td class="m">A4, A5</td><td>Bus I2C (écran LCD)</td></tr>
+              </tbody>
+            </table></div>
+            <p>Comme la SD et l'Ethernet partagent le même bus SPI, le code les active à tour de rôle (ordre de démarrage : SPI, SD, Wire, LCD, Ethernet).</p>
+
+            <h2 id="g-demarrage">Démarrage et boucle</h2>
+            <h3>Ce que fait <code>setup()</code></h3>
+            <p>Au branchement (ou après <code>reset</code>), la carte attend 2 secondes, puis déroule ceci. Chaque étape écrit une ligne dans le terminal Série.</p>
+            <ol class="steps">
+              <li>Ouvre le port Série à 115200 bauds et affiche la grande bannière rouge « IoToS ».</li>
+              <li>Charge la configuration depuis l'EEPROM. Si elle n'est pas valide (mauvaise version du programme), recharge les valeurs d'usine.</li>
+              <li>Configure les broches et remet la LED dans l'état sauvegardé.</li>
+              <li>Initialise le bus SPI et la carte SD. Si la carte manque, l'erreur est affichée en blanc sur fond rouge et le FTP reste coupé.</li>
+              <li>Initialise Ethernet : adresse MAC, IP fixe (avec test de cohérence IP / masque / passerelle) ou DHCP, puis détection du W5500 et du lien.</li>
+              <li>Teste le DNS (résolution de <code>www.google.com</code>) puis récupère l'heure sur <code>europe.pool.ntp.org</code>. Sans Internet, l'heure reste inconnue.</li>
+              <li>Lance les serveurs : Telnet (23), FTP (21, si la SD est là), WEB (port de la configuration).</li>
+              <li>Affiche « System OK » et passe à la boucle.</li>
+            </ol>
+            <h3>Ce que fait <code>loop()</code></h3>
+            <p>La boucle tourne en permanence. Elle ne bloque jamais longtemps : chaque service fait un petit travail puis rend la main.</p>
+            <div class="flow">
+              <div><b>cmdLine.update()</b>Lit le clavier Série et exécute les commandes tapées.</div>
+              <div><b>serverTelnet</b>Accepte un client Telnet et lit ses commandes.</div>
+              <div><b>ServeurWEB()</b>Si le WEB est ON : répond à un navigateur.</div>
+              <div><b>ftpSrv.handleFTP()</b>Si la SD est là et le FTP ON : sert un client FTP.</div>
+              <div><b>Bannières</b>Affiche l'écran d'accueil à la première connexion Série ou Telnet.</div>
+            </div>
+            <div class="callout warn">Conséquence du « coopératif » : une commande longue bloque le reste. Exemple : <code>ping</code> envoie 4 paquets en attendant 1 seconde entre chaque, donc pendant ~4 s le site web ne répond pas.</div>
+
+            <h2 id="g-services">Les services</h2>
+            <h3>Ligne de commande (CLI)</h3>
+            <p>Le même interpréteur sert le port Série (USB) et Telnet. Tu tapes <code>commande argument</code>, séparés par un espace. Il y a un historique de 10 commandes (flèches haut et bas, sans doublon consécutif) et la complétion par Tab : une seule possibilité, elle est complétée avec un espace ; plusieurs, la carte les liste puis charge la première, et chaque Tab suivant passe à la suivante ; aucune, elle bipe. Les noms de commandes ne tiennent pas compte des majuscules (<code>PING</code>, <code>Ping</code> et <code>ping</code> marchent), mais pas les arguments. Une ligne fait 127 caractères au maximum, et une commande inconnue répond <code>Invalid command</code>. Le CLI peut être verrouillé par mot de passe (<code>login on</code>) : les commandes sensibles répondent alors « Acces Refuse ».</p>
+            <h3>Serveur WEB</h3>
+            <p>Il sert deux pages stockées sur la carte SD : <code>index.htm</code> (commande de la LED, état en temps réel) et <code>ConfIP.htm</code> (réglage de l'IP). L'état de la LED se rafraîchit tout seul toutes les 10 secondes grâce à une requête AJAX. Un login Basic (Base64) est possible. Détails dans la section « Pages web et AJAX ».</p>
+            <h3>Serveur FTP</h3>
+            <p>Il donne accès à la carte SD pour mettre à jour le site ou récupérer les fichiers du datalogger. Identifiants d'usine : <code>arduino</code> / <code>arduino</code>. Ports : 21 pour le contrôle, 50009 pour les données (mode passif).</p>
+            <h3>Datalogger</h3>
+            <p>Quand il est ON, chaque changement d'état de la LED (par commande ou par le site web) ajoute une ligne au fichier choisi avec <code>select</code> : <code>date;heure;ON</code> ou <code>OFF</code>. Le fichier s'ouvre directement dans Excel.</p>
+            <div class="term"><b>type datalogger.csv</b>
+Date ;Heure ; Etat Led
+09/03/2026;22:17:31;ON
+09/03/2026;22:17:34;OFF</div>
+            <h3>Horloge NTP</h3>
+            <p>Au démarrage, l'heure vient d'Internet. Elle sert à horodater le datalogger, à afficher « Date du dernier reboot » et l'heure dans <code>print</code>. Si le WAN est coupé : « WAN ERROR !! -- Serveur NTP (Real Time) : OFF ! ».</p>
+            <h3>Tolérance aux erreurs réseau</h3>
+            <p>Si l'IP fixe est incohérente (IP et passerelle dans des réseaux différents, masque se terminant par 255, IP identique à la passerelle, IP finissant par 0 ou 255), le démarrage affiche l'erreur et note que la carte « passe en DHCP ».</p>
+
+            <h2 id="g-commandes">Toutes les commandes</h2>
+            <p>La liste ci-dessous est générée à partir de la table <code>commands[]</code> du code. Le cadenas indique les commandes qui répondent « Acces Refuse » quand le CLI est verrouillé. Le bouton « essayer » exécute la commande dans l'onglet Terminal.</p>
+            <input class="cmdsearch" id="cmdSearch" type="search" placeholder="Filtrer : ip, datalogger, fichier…" aria-label="Filtrer les commandes">
+            <div id="cmdTables"></div>
+
+            <h2 id="g-scenarios">Pas à pas</h2>
+            <h3>Changer l'adresse IP</h3>
+            <ol class="steps">
+              <li>Tape <code>ip 192.168.0.2</code>. La valeur est changée en RAM seulement.</li>
+              <li>Tape <code>print</code> pour vérifier : la rubrique « Configuration Reseau en RAM » montre la nouvelle IP, celle de l'EEPROM l'ancienne.</li>
+              <li>Tape <code>save</code> pour l'écrire dans l'EEPROM.</li>
+              <li>Tape <code>reset</code>. La carte redémarre et prend la nouvelle IP. En Telnet, la connexion est coupée : reconnecte-toi sur la nouvelle adresse.</li>
+            </ol>
+            <p>La même chose se fait depuis la page web « Configuration IP » : le bouton « Valider » enregistre en EEPROM et redémarre tout seul.</p>
+            <h3>Sauvegarder et restaurer une configuration</h3>
+            <ol class="steps">
+              <li><code>saveconf maconf</code> écrit toute la configuration dans un fichier de la carte SD (297 octets).</li>
+              <li>Plus tard, <code>loadconf maconf</code> la relit, la copie en RAM et dans l'EEPROM.</li>
+              <li>Fais ensuite <code>save</code> puis <code>reset</code> pour que tout soit pris en compte, comme l'indique le message affiché.</li>
+            </ol>
+            <p>Le fichier est lié à la version du programme : un fichier venant d'une autre version est refusé (« Mismatch »).</p>
+            <h3>Journaliser les ON/OFF</h3>
+            <ol class="steps">
+              <li><code>create mesures.csv</code> crée le fichier avec son en-tête Excel <code>Date ; Heure ; Etat LED</code>.</li>
+              <li><code>select mesures.csv</code> le désigne comme fichier du datalogger.</li>
+              <li><code>datalogger on</code> active l'enregistrement.</li>
+              <li><code>LED on</code>, <code>LED off</code> ou les boutons du site web ajoutent une ligne. Chaque ajout affiche un cadre « Enregistrement Data » avec la taille du fichier.</li>
+              <li>Lis le résultat avec <code>type mesures.csv</code>, ou récupère le fichier en FTP.</li>
+            </ol>
+            <h3>Récupérer des fichiers en FTP (FileZilla)</h3>
+            <ol class="steps">
+              <li>Dans « Fichier → Gestionnaire de sites », crée un site : hôte = IP de la carte.</li>
+              <li>Type d'authentification : « Compte ». Identifiant = nom de la connexion, mot de passe, et « Compte » = le login FTP (<code>arduino</code> d'usine).</li>
+              <li>Onglet « Paramètres de transfert » : limite le nombre de connexions à 1 (la carte n'en gère pas plus).</li>
+              <li>Sur Android, l'application AndFTP convient.</li>
+            </ol>
+            <h3>Verrouiller la ligne de commande</h3>
+            <ol class="steps">
+              <li><code>password MonSecret</code> choisit le mot de passe (d'usine : <code>changerLeMotDePasse</code>).</li>
+              <li><code>login on</code> verrouille. Les commandes sensibles répondent « Acces Refuse ».</li>
+              <li><code>login MonSecret</code> déverrouille (« IoTOS UNLOCKED !! »). <code>exit</code> reverrouille.</li>
+              <li>À chaque mauvais mot de passe, le délai d'attente affiché double : 10 s, 20 s, 40 s… jusqu'à des jours.</li>
+            </ol>
+            <h3>Protéger le site web</h3>
+            <ol class="steps">
+              <li><code>loginWEB on</code> demande un identifiant et un mot de passe au navigateur.</li>
+              <li><code>login-passWEB dXNlcjpwYXNz</code> : la valeur est « utilisateur:motdepasse » encodé en Base64 (ici <code>user:pass</code>). Utilise un encodeur comme base64encode.org, par exemple <code>admin:01_Admin</code> donne <code>YWRtaW46MDFfQWRtaW4=</code>.</li>
+              <li><code>save</code> pour garder ces réglages après un redémarrage.</li>
+            </ol>
+
+            <h2 id="g-terminal">Régler le terminal</h2>
+            <div class="tbl"><table>
+              <thead><tr><th>Logiciel</th><th>Réglage</th></tr></thead>
+              <tbody>
+                <tr><td>Série (PuTTY, KiTTY)</td><td>Choisir le bon port COM et la vitesse <strong>115200</strong>. Menu Connexion → Série : « Flow control » sur <strong>None</strong>.</td></tr>
+                <tr><td>Moniteur série de l'IDE Arduino</td><td>Vitesse 115200, fin de ligne « Les deux, NL et CR ». Au démarrage, taper <code>stop</code> arrête les tentatives de connexion Ethernet (d'après le commentaire du code).</td></tr>
+                <tr><td>Telnet (PuTTY, KiTTY)</td><td>Hôte = IP de la carte, case Telnet, port 23. Dans Connexion → Telnet, <strong>décocher</strong> « Return key sends Telnet New Line instead of ^M », sinon la touche Entrée est décalée.</td></tr>
+                <tr><td>MobaXterm</td><td>Il fait son propre écho : tape <code>cli off</code> pour éviter les lettres en double (« pprriinntt »). Avec PuTTY, <code>cli on</code> remet l'écho normal.</td></tr>
+              </tbody>
+            </table></div>
+            <p>Il faut d'abord que la carte ait une IP configurée (via le Série ou la page web) pour te connecter en Telnet.</p>
+
+            <h2 id="g-eeprom">Configuration et EEPROM</h2>
+            <p>Tout le réglage tient dans une structure <code>conf_t</code> de <strong>297 octets</strong>, écrite dans l'EEPROM à partir de l'adresse 5. Un champ <code>validity</code> vaut <code>100000066</code> : si l'EEPROM contient une autre valeur (programme d'une autre version), IoToS recharge les valeurs d'usine pour éviter de mélanger deux structures différentes.</p>
+            <div class="tbl"><table>
+              <thead><tr><th>Champ</th><th>Valeur d'usine</th><th>Rôle</th></tr></thead>
+              <tbody>
+                <tr><td class="m">nameSystem</td><td>PriseIP_UNO_R4</td><td>Nom affiché par <code>print</code></td></tr>
+                <tr><td class="m">telnetPassword</td><td>changerLeMotDePasse</td><td>Mot de passe du CLI</td></tr>
+                <tr><td class="m">login_cmdTelnetSwitch</td><td>0 (OFF)</td><td>CLI verrouillé ou non</td></tr>
+                <tr><td class="m">SrvWEBswitch, SrvFTPswitch</td><td>1, 1</td><td>Serveurs WEB et FTP actifs</td></tr>
+                <tr><td class="m">led</td><td>0</td><td>État de la LED, restauré au démarrage</td></tr>
+                <tr><td class="m">mac</td><td>DE:AD:BE:EF:FE:B1</td><td>Adresse MAC (à rendre unique sur le réseau)</td></tr>
+                <tr><td class="m">dhcp</td><td>0 (IP fixe)</td><td>Mode d'adressage</td></tr>
+                <tr><td class="m">ip / subnet / gateway</td><td>192.168.0.10 / 255.255.255.0 / 192.168.0.254</td><td>Réseau en IP fixe</td></tr>
+                <tr><td class="m">port</td><td>80</td><td>Port du serveur WEB</td></tr>
+                <tr><td class="m">loginWEB, loginPasswordWEB</td><td>0, dXNlcjpwYXNz</td><td>Login du site (Base64 de user:pass)</td></tr>
+                <tr><td class="m">loginFTP, passwordFTP</td><td>arduino, arduino</td><td>Identifiants FTP</td></tr>
+                <tr><td class="m">dataloggerSwitch, fichierEnCours</td><td>0, datalogger.csv</td><td>Datalogger et fichier cible</td></tr>
+                <tr><td class="m">lcdRetro</td><td>200</td><td>Rétroéclairage de l'écran (0 à 255)</td></tr>
+              </tbody>
+            </table></div>
+            <p>Le DNS n'est pas dans la structure : il est fixé dans le programme à <code>1.1.1.1</code> (Cloudflare).</p>
+            <h3>RAM, EEPROM, réseau actif : trois « versions » de la config</h3>
+            <p>C'est le point qui surprend le plus. <code>print</code> en montre trois :</p>
+            <ul>
+              <li><strong>Configuration en cours</strong> : ce que le réseau utilise réellement depuis le dernier démarrage.</li>
+              <li><strong>En RAM</strong> : ce que tes commandes <code>ip</code>, <code>subnet</code>… viennent de modifier. Perdu au redémarrage.</li>
+              <li><strong>En EEPROM</strong> : ce que <code>save</code> a écrit. C'est ce que la carte relira après <code>reset</code>.</li>
+            </ul>
+            <div class="flow">
+              <div><b>commandes</b><code>ip</code>, <code>name</code>, <code>LED</code>… modifient la RAM</div>
+              <div><b>save</b>RAM → EEPROM</div>
+              <div><b>reset</b>EEPROM → RAM → réseau actif</div>
+              <div><b>reload</b>EEPROM → RAM, sans redémarrer</div>
+              <div><b>defaults</b>usine → RAM et EEPROM</div>
+            </div>
+            <p><code>login on</code> et <code>login off</code> écrivent aussi toute la configuration dans l'EEPROM. Le nom, le mot de passe et la plupart des réglages ne sont gardés qu'avec <code>save</code>.</p>
+
+            <h2 id="g-web">Pages web et AJAX</h2>
+            <p>Le serveur lit la requête HTTP du navigateur et cherche des mots-clés dedans pour choisir quoi répondre :</p>
+            <div class="tbl"><table>
+              <thead><tr><th>La requête contient</th><th>La carte fait</th></tr></thead>
+              <tbody>
+                <tr><td class="m">GET /?BoutonON</td><td>LED allumée, puis renvoie <code>index.htm</code></td></tr>
+                <tr><td class="m">GET /?BoutonOFF</td><td>LED éteinte, puis renvoie <code>index.htm</code></td></tr>
+                <tr><td class="m">GET / ou index.htm</td><td>Envoie <code>index.htm</code> depuis la SD (par blocs de 512 octets)</td></tr>
+                <tr><td class="m">ajax_inputs?led</td><td>Répond en XML <code>&lt;inputs&gt;&lt;LED&gt;1&lt;/LED&gt;&lt;/inputs&gt;</code> : c'est le rafraîchissement toutes les 10 s</td></tr>
+                <tr><td class="m">ConfIP.htm</td><td>Envoie la page de configuration</td></tr>
+                <tr><td class="m">ajax_inputs (seul)</td><td>XML avec DHCP, IP, masque, passerelle et LOG pour remplir le formulaire</td></tr>
+                <tr><td class="m">ajax_outputs&amp;DHCP=…</td><td>Reçoit le formulaire, enregistre en EEPROM, répond « Configuration Enregistre… Reboot : Now », puis redémarre</td></tr>
+                <tr><td class="m">favicon.ico</td><td>Répond 404 pour ne pas renvoyer la page à chaque icône</td></tr>
+              </tbody>
+            </table></div>
+            <p>AJAX signifie que la page n'a pas besoin de se recharger : un petit script interroge la carte et met à jour seulement l'état de la LED.</p>
+            <h3>Login du site</h3>
+            <p>Si <code>loginWEB</code> est ON, le serveur cherche dans les en-têtes la chaîne Base64 enregistrée (<code>Authorization: Basic …</code>). Absente : il répond <code>401 Unauthorized</code> avec <code>WWW-Authenticate: Basic realm="Secure"</code>, et le navigateur affiche sa boîte de connexion. Essaie dans l'onglet « Page web » après <code>loginWEB on</code>.</p>
+            <div class="callout warn">Le trafic est en HTTP clair, sans chiffrement. L'authentification Basic ne protège donc que contre un curieux sur le réseau local.</div>
+
+            <h2 id="g-depannage">Dépannage</h2>
+            <p>Les symptômes les plus courants, avec la cause dans le code et la commande qui règle le problème.</p>
+            <div class="tbl"><table>
+              <thead><tr><th>Symptôme</th><th>Cause probable</th><th>Quoi faire</th></tr></thead>
+              <tbody>
+                <tr><td>Rien ne s'affiche en Série</td><td>Mauvaise vitesse ou contrôle de flux activé.</td><td>115200 bauds, <em>Flow control : None</em>. La bannière arrive environ 2 secondes après le branchement.</td></tr>
+                <tr><td>Chaque lettre apparaît deux fois en Telnet</td><td>Le terminal fait son propre écho (MobaXterm).</td><td>Taper <code>cli off</code>.</td></tr>
+                <tr><td>Un « ^M » ou un double Entrée en Telnet</td><td>Réglage de PuTTY. La carte accepte les deux façons d'envoyer Entrée (CR+LF et CR+NUL), c'est donc le terminal qui gêne.</td><td>Conseil du programme : menu Telnet de PuTTY, décocher « Return key sends Telnet New Line instead of ^M ».</td></tr>
+                <tr><td>« Acces Refuse »</td><td>Le login du CLI est actif (<code>login on</code>).</td><td>Taper <code>login &lt;motDePasse&gt;</code>. Mot de passe perdu : se connecter en Série après un <code>reset</code>, la carte l'affiche au démarrage.</td></tr>
+                <tr><td>« Invalid command »</td><td>Faute de frappe : le nom n'est pas dans la table des commandes.</td><td>Taper <code>help</code>, ou Tab pour compléter. Les majuscules n'ont pas d'importance.</td></tr>
+                <tr><td>« Operande absent : commande annulee »</td><td>La commande attend un argument.</td><td>Exemple : <code>ip 192.168.0.20</code>, pas seulement <code>ip</code>.</td></tr>
+                <tr><td>J'ai changé l'IP mais rien ne bouge</td><td>La commande ne modifie que la RAM.</td><td><code>save</code> puis <code>reset</code>. Contrôle avec <code>print</code> (les trois blocs de configuration).</td></tr>
+                <tr><td>La page web ne s'ouvre pas</td><td>WEB coupé, mauvais port, IP différente de celle de la carte, ou la carte est passée en DHCP (IP incohérente au démarrage).</td><td><code>print</code> pour lire l'IP et le port actuels, <code>web on</code>, puis l'adresse exacte dans le navigateur.</td></tr>
+                <tr><td>Le site ne s'affiche pas alors que le serveur répond</td><td>Les fichiers <code>index.htm</code> et <code>ConfIP.htm</code> manquent sur la carte SD : le terminal affiche « Fichier introuvable sur SD ».</td><td><code>dir</code> pour vérifier, et les copier sur la SD (par FTP).</td></tr>
+                <tr><td>Le FTP ne répond pas</td><td>SD absente (le FTP reste coupé), FTP sur OFF, ou plusieurs connexions FileZilla.</td><td><code>ftp on</code>, vérifier la SD avec <code>dir</code>, limiter FileZilla à 1 connexion.</td></tr>
+                <tr><td>Pas d'heure NTP au démarrage</td><td>Le test DNS a échoué : pas d'accès Internet.</td><td>Vérifier la passerelle (<code>print</code>) et le câble. Le démarrage affiche « WAN ERROR ».</td></tr>
+                <tr><td>Le datalogger n'écrit rien</td><td>Datalogger sur OFF, mauvais fichier choisi, ou SD absente.</td><td><code>datalogger on</code>, <code>select datalogger.csv</code>, puis <code>type</code> pour relire.</td></tr>
+                <tr><td>« Pas de lien Ethernet » au démarrage</td><td>Câble RJ45 débranché ou box éteinte.</td><td>Vérifier le câble puis <code>reset</code>.</td></tr>
+              </tbody>
+            </table></div>
+
+            <h2 id="g-pieges">À savoir (limites et pièges)</h2>
+            <p>Ces points viennent de la lecture du code, pas d'essais sur la carte. Ils expliquent des comportements qui peuvent surprendre.</p>
+            <ul>
+              <li><strong>Une IP mal écrite devient 0.0.0.0.</strong> <code>ip 192.168.0</code> ne produit pas d'erreur : la commande confirme « IP 0.0.0.0 ». Même chose pour <code>subnet</code> et <code>gateway</code>. Vérifie avec <code>print</code> avant <code>save</code>.</li>
+              <li><strong><code>pass</code> n'est pas le mot de passe.</strong> C'est un synonyme de <code>gateway</code> (passerelle). Le mot de passe se règle avec <code>password</code>.</li>
+              <li><strong><code>ping</code> et <code>tracert</code> par nom.</strong> <code>ping</code> ne résout pas les noms DNS (il faut une IP : un nom devient 0.0.0.0 et ne répond pas). <code>tracert</code> les résout.</li>
+              <li><strong><code>edit</code> écrase le début du fichier.</strong> Il écrit le texte à partir de l'octet 0 du fichier choisi avec <code>select</code>, sans le vider ni ajouter à la fin. Sur un fichier CSV, il remplace les premiers caractères.</li>
+              <li><strong>Le verrou du CLI n'est pas total.</strong> Certaines commandes ne le testent pas : <code>help</code>, <code>ping</code>, <code>tracert</code>, <code>ram</code>, <code>version</code>, <code>save</code>, <code>reload</code>, <code>defaults</code>, <code>reset</code>, <code>login</code>, <code>exit</code>. En particulier <code>defaults</code> remet les valeurs d'usine, mot de passe compris, même verrouillé.</li>
+              <li><strong>Le bon mot de passe passe toujours.</strong> Le délai qui double ne fait qu'afficher un temps d'attente après une erreur ; il ne bloque pas un essai correct.</li>
+              <li><strong>Les mots de passe sont affichés en clair</strong> par <code>print</code> (CLI, FTP) et par <code>login on</code>.</li>
+              <li><strong>La MAC d'usine est <code>…:B1</code>.</strong> Le texte d'aide dit <code>…:ED</code>. Avec la MAC d'usine, le démarrage et <code>print</code> affichent un avertissement : deux cartes avec la même MAC sur un réseau se perturbent.</li>
+              <li><strong>Le DNS affiché est écrit en dur</strong> (1.1.1.1) dans <code>print</code>.</li>
+              <li><strong>Pas de formatage de carte :</strong> <code>FormatSD</code> est déclarée mais « non implémentée dans cette version ». Le watchdog, l'envoi de mails, l'OTA et le reset matériel (bouton D3) sont notés « off » dans les commentaires.</li>
+              <li><strong>Un seul client FTP à la fois</strong> est géré : limite à 1 connexion dans FileZilla.</li>
+            </ul>
+
+            <h2 id="g-libs">Bibliothèques et licences</h2>
+            <div class="tbl"><table>
+              <thead><tr><th>Bibliothèque</th><th>Rôle</th><th>Licence</th><th>Modifiée</th></tr></thead>
+              <tbody>
+                <tr><td>Ethernet 2.0.2</td><td>Pile réseau W5500</td><td>LGPL</td><td>Non</td></tr>
+                <tr><td>EthernetICMP</td><td>ping, tracert (TTL 1 à 30)</td><td>LGPL v2.1 (double GPL v2)</td><td>Oui (RA4M1)</td></tr>
+                <tr><td>NTPClient2</td><td>Heure Internet, date au format JJ/MM/AAAA</td><td>MIT</td><td>Oui</td></tr>
+                <tr><td>SdFat 2.3.1</td><td>FAT32, noms longs</td><td>MIT (la v1 était GPL v3 : utiliser la v2)</td><td>Non</td></tr>
+                <tr><td>SimpleFTPServer 3.0.2</td><td>Serveur FTP</td><td>MIT</td><td>Oui (SPI SD/ETH)</td></tr>
+                <tr><td>U8g2 2.35.30</td><td>Écran ST7567S</td><td>BSD 2 clauses</td><td>Oui (ordre I2C)</td></tr>
+                <tr><td>CmdLine (modifiée)</td><td>Shell Série et Telnet</td><td>d'après arduino-cmdLine (IndustrialShields)</td><td>Fortement</td></tr>
+                <tr><td>Arduino-MemoryFree</td><td>Commande <code>ram</code></td><td>Beerware</td><td>Non</td></tr>
+              </tbody>
+            </table></div>
+            <p>IoToS est sous <strong>GNU LGPL v2.1</strong> : usage libre, y compris commercial ; si tu redistribues IoToS modifié, tu publies ses sources modifiées, tu gardes les en-têtes de copyright et tu mentionnes IoToS et sa licence. Ton propre code (.ino) reste le tien. Fourni sans garantie.</p>
+            <p>Site du projet : <a href="http://iotos.dsmynas.org/" target="_blank" rel="noopener">iotos.dsmynas.org</a>. Contact de l'auteur indiqué dans le code : radiobiechy@gmail.com.</p>
+
+            <h2 id="g-simu">Ce que fait le simulateur</h2>
+            <p><strong>Sources :</strong> le code d'IoToS v72 de Jean-Marc Biechy (programme principal, Shell, ServeurWEB, utils, Driver Ethernet), la bibliothèque CmdLine v20 et des captures de la vraie carte. Le simulateur n'exécute pas le vrai firmware : c'est une reproduction en JavaScript de son comportement.</p>
+            <p><strong>Reproduit d'après le code :</strong> la bannière et les lignes de démarrage (OK, FAILED et avertissements), l'écran d'aide, <code>print</code>, <code>dir</code>, tous les messages de confirmation et d'erreur des commandes, la différence RAM / EEPROM / réseau actif, le verrou et le délai de <code>login</code>, le datalogger avec ses fichiers CSV, les logs du serveur web dans le terminal, le login Basic du site, le rafraîchissement de la LED toutes les 10 s, la page de configuration IP et le redémarrage qui suit.</p>
+            <p><strong>Approximé, mais réglable :</strong> les machines qui répondent au <code>ping</code> et leurs temps, les adresses obtenues en DHCP ou par DNS, la taille de la carte SD, la RAM et la date de compilation affichée par <code>version</code> se changent dans le panneau « Réglages de la carte simulée » de l'onglet Terminal. <strong>Approximé et fixe :</strong> le chemin de <code>tracert</code> et la date des fichiers de la carte. Les gros fichiers <code>.htm</code> sont tronqués par <code>type</code>.</p>
+            <p><strong>Absent :</strong> le serveur FTP réel, l'écran LCD, le bouton matériel et tout ce qui touche au vrai réseau.</p>
+
+            <h2 id="g-apropos">À propos du projet</h2>
+            <p>Projet personnel de Leo, élève de Terminale CIEL : faire <strong>voir</strong> le micro-OS IoToS dans un navigateur, sans carte Arduino sous la main. La page contient un terminal, la page web de la carte et ce guide.</p>
+            <h3>Démarche</h3>
+            <ol class="steps">
+              <li>Comprendre ce qu'est IoToS : un micro-OS pour Arduino UNO R4 écrit par Jean-Marc Biechy.</li>
+              <li>Réunir les sources : le code complet de la version 72, la bibliothèque CmdLine v20, les pages web et fichiers CSV de la carte SD, et des captures d'écran de la vraie carte en fonctionnement.</li>
+              <li>Reproduire le comportement en JavaScript : démarrage, commandes, serveur web, EEPROM, login, datalogger.</li>
+              <li>Vérifier : tests automatiques (démarrage, commandes, pages web, login, configuration IP, Telnet, pannes de SD et d'Internet) et relecture des messages face au code source et aux captures.</li>
+              <li>Écrire le guide à partir du code, y compris ses limites et ses pièges.</li>
+            </ol>
+            <h3>Sources utilisées</h3>
+            <div class="tbl"><table>
+              <thead><tr><th>Source</th><th>Sert à</th></tr></thead>
+              <tbody>
+                <tr><td>Code d'IoToS v72 (programme principal, Shell, ServeurWEB, utils, Driver Ethernet)</td><td>Messages, commandes, démarrage, pages web</td></tr>
+                <tr><td>Bibliothèque CmdLine v20 et sa documentation</td><td>Saisie, Tab, historique, « Invalid command »</td></tr>
+                <tr><td><code>index.htm</code>, <code>ConfIP.htm</code>, fichiers CSV et de configuration</td><td>Contenu de la carte SD</td></tr>
+                <tr><td>Captures d'écran de la vraie carte</td><td>Apparence du terminal et du site</td></tr>
+                <tr><td>Site du projet iotos.dsmynas.org</td><td>Présentation générale</td></tr>
+              </tbody>
+            </table></div>
+            <h3>Ce qui est reproduit et ce qui est approximé</h3>
+            <p>Le détail est dans la section « Ce que fait le simulateur ». En résumé : tout ce qui est écrit dans le code est reproduit. Ce qui dépend de la vraie carte ou du réseau (adresses DHCP, temps de <code>ping</code>, taille de la carte SD…) est approximé, et réglable dans le panneau « Réglages de la carte simulée ». Le simulateur n'a pas été comparé en direct à une carte réelle : il se fonde sur le code et sur des captures.</p>
+            <h3>Réalisé avec l'aide d'une IA</h3>
+            <p>Le code du simulateur et la rédaction de ce guide ont été réalisés avec l'aide de <strong>Claude</strong>, une IA d'Anthropic, à partir des sources ci-dessus fournies par Leo. Les informations techniques viennent du code de Jean-Marc Biechy. Une IA peut se tromper : c'est pourquoi les approximations sont listées et pourquoi chaque comportement peut être vérifié dans le code d'IoToS.</p>
+            <h3>Auteur d'IoToS et licence</h3>
+            <p>IoToS est l'œuvre de <strong>Jean-Marc Biechy</strong> (GNU LGPL v2.1), <a href="http://iotos.dsmynas.org/" target="_blank" rel="noopener">iotos.dsmynas.org</a>. Ce simulateur est une reproduction indépendante de son comportement, sans le firmware d'origine.</p>
+
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Essaie : <code>print</code>, <code>dir</code>, <code>LED on</code>, puis l'onglet « Page web de la carte » pour voir la LED changer et les requêtes arriver dans le terminal. Pour changer l'IP : <code>ip 192.168.0.2</code>, <code>save</code>, <code>reset</code>.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var DATA = {"help":"\n  \n  \n  \u001b[1;32;40m  \n  ########################################################################### \n  ###  ---   Prise IP   ---                      Serial Telnet Connexion  ###   \n  ###  Info Status Arduino UNO R4 - Ethernet2         Micro System IoToS  ### \n  ###########################################################################  \u001b[0;39;49m      \n                                 \u001b[1;31;40m      \n  - General System commandes :   \u001b[0;39;49m\n      print                      print configuration courante (info)\n      name                       Changer le nom du systeme\n      CLI           on/off       Telnet CLI echo (MobaXtern) permet de couper l'echo (caracteres en double)\n   \n      LED           on/off       LED ON ou OFF  \n      WEB           on/off       Serveur WEB ON/OFF  \n      FTP           on/off       Serveur FTP ON/OFF                                         \n      ram                        RAM Disponible \n                                 \u001b[1;31;40m    \n  - Telnet Reseau commandes :    \u001b[0;39;49m\n      login         on / xxxxxx  Active le Login d'acces au cmdLine et au Telnet\n                                 Si le login est active : taper login xxxxxxxxx \n      password      xxxxxx       Mot de passe pour l'acces au cmdLine et au Telnet\n      exit                       Ferme le session (reactive le login)\n  \n      ping          xx.xx.xx.xx  Exemple : ping 192.168.0.1 \n      tracert       <URL ou IP>  Information route des connexions Reseau   \n      netstat                    Information des socket utilises des connexions Reseau   \n                                 \u001b[1;31;40m    \n  - Datalogger commands :        \u001b[0;39;49m\n      datalogger    on/off       Activation de l'enregistrement des actions ON/OFF sur la prise IP \n      create        <name>       Creation Fichier : create NomFichier.extention avec entete du fichier Excel\n      select        <Nom.ext>    NomFichier.Extention pour le datalogger\n                                        \u001b[1;31;40m   \n  - SD Fichier commands (Mini MS-DOS) : \u001b[0;39;49m\n      dir                        Info Fichier sur le SD\n      rename        <OLD name>   <New name> \n      del           <name>       Efface Fichier \n      type          <name>       Affiche contenu Fichier selectionne.extention\n      edit                       Exemple edit texte a enregistrer (limiter a 1024 caracteres)\n      copie   <name1>  <name2>   Le name2 est cree avec la copie de name1\n                                         \u001b[1;31;40m     \n  - Configuration WEB server commandes : \u001b[0;39;49m\n      loginWEB      on/off       enable/disable Login et Password du site WEB \n      login-passWEB              changer de Login:Password code en base 64 (voir : https://www.base64encode.org/) \n                                         \u001b[1;31;40m   \n  - Configuration FTP server commandes : \u001b[0;39;49m\n      loginFTP                   changer de Login   \n      passwordFTP                changer de Password  \n                                 \u001b[1;31;40m       \n  - Configuration IP commandes : \u001b[0;39;49m\n      mac           <MAC>        set local MAC address (default: DE:AD:BE:EF:FE:ED)\n      dhcp          on/off       enable/disable DHCP\n      ip            <IP>         set local IP address (Exemple : ip 192.168.0.66)\n      subnet        <IP>         set Masque de sous reseau   \n      gateway       <IP>         set Passerelle \n      port          <0 65535>    set Port WEB (Defaut 80) \n                       \u001b[1;31;40m       \n  - EEPROM commandes : \u001b[0;39;49m\n      reload                     load EEPROM avec la configuration sauvegarde\n      defaults                   set default configuration HARD Reset (192.168.0.10)\n      save                       save configuration en EEPROM\n      loadconf      <name>       Charge la configuration depuis un fichier\n      saveconf      <name>       Sauve la configuration dans un fichier\n      reset                      Restart Arduino et load la configuration enregistre en EEPROM\n      version                    Version et debug du programme  \n  \n   Exemple : Pour changer l'IP de l'Arduino : taper commande :\n   > ip 192.168.0.2\n   puis la commande save et enfin reset pour redemarrer l'arduino dans la nouvelle configuration  \n","ver":["\u001b[1;31;40m","","","",""," *********************************************************"," *                                                       *"," *           ###          #######         ###            *"," *            #              #           #               *"," *            #      ##      #     ##     #              *"," *            #     #  #     #    #  #     #             *"," *            #     #  #     #    #  #      #            *"," *           ###     ##      #     ##    ###             *"," *                                                       *"," *********************************************************"," *         -----  Arduino UNO Rev 4 Mini  -----          *"," *                                                       *"," * Programme : Prise IP -- WEB Control Datalogger        *"," *                                                       *"," * ### Configuation en Ligne de commande cmd Line        *"," * - CLI en Serial (cmdLine)  -- login                   *"," * - CLI en Telnet (cmdLine)  -- login                   *"," *   TAB Autocompletion - Historique fleche Haut/Bas     *"," * Ping (complet), tracert, Netstat                      *"," *                                                       *"," * ### Services :                                        *"," * - Serveur WEB AJAX (fichier htm sur Micro SD Card)    *"," *   - Login Authentification page WEB                   *"," * - Configuration Ethernet IP par page WEB              *"," * - Serveur FTP (fichier sur carte Micro SD)            *"," * - Datalogger avec time NTP (fichier en Micro SD Card) *"," *                                                       *"," * Micro OS -= IoToS =-                       Biechy v72 *"," *********************************************************","\u001b[0;39;49m",""],"hdr":["###########################################################################","###  ---   Prise IP   ---                      Serial Telnet Connexion  ###","###  Info Status Arduino UNO R4 - Ethernet2         Micro System IoToS  ###","###########################################################################  \u001b[0;39;49m"],"csv":"Date ;Heure ; Etat Led\r\n09/03/2026;22:17:31;ON\r\n09/03/2026;22:17:34;OFF\r\n09/03/2026;22:17:38;ON\r\n09/03/2026;22:17:41;OFF\r\n09/03/2026;22:19:07;OFF\r\n09/03/2026;22:19:13;ON\r\n10/03/2026;22:29:07;ON\r\n10/03/2026;22:29:10;OFF\r\n10/03/2026;23:37:54;ON\r\n16/03/2026;17:10:14;ON\r\n16/03/2026;17:10:16;OFF\r\n16/03/2026;20:03:23;ON\r\n17/03/2026;00:19:07;ON\r\n17/03/2026;00:19:17;OFF\r\n17/03/2026;00:20:04;ON\r\n17/03/2026;00:20:16;OFF\r\n","files":{"index.htm":"<!DOCTYPE html>\n<!--\n=======================================================================\n  FICHIER : index.htm\n  PROJET  : Arduino Commande WEB — Contrôle LED\n  AUTEUR  : Gontier Julien\n  VERSION : CSS + JS v4 — AJAX état LED en temps réel\n\n  CONTRAINTE ARDUINO :\n  Tout (HTML, CSS, JavaScript) est dans CE SEUL fichier.\n\n  FONCTIONNEMENT REQUÊTES :\n  ┌──────────────────────────────────────────────────────────────┐\n  │ Clic \"Allumer\"   → GET /?BoutonON          (rechargement)    │\n  │ Clic \"Éteindre\"  → GET /?BoutonOFF         (rechargement)    │\n  │ AJAX polling     → GET /ajax_inputs?led&nocache=xxx          │\n  │                    Réponse XML : <inputs><LED>0ou1<\/LED>...  │\n  │ Lien config      → GET /ConfIP.htm                           │\n  └──────────────────────────────────────────────────────────────┘\n\n  L'AJAX interroge l'Arduino toutes les LED_POLL_MS millisecondes\n  et met à","ConfIP.htm":"<!DOCTYPE html>\n<!--\n=======================================================================\n  FICHIER : ConfIP.htm\n  PROJET  : Arduino Commande WEB — Configuration réseau\n  AUTEUR  : Gontier Julien\n  VERSION : CSS + JS v5 — charte IoToS + flèches + validation réseau\n\n  CONTRAINTE ARDUINO :\n  Tout (HTML, CSS, JavaScript) est dans CE SEUL fichier.\n\n  FONCTIONNEMENT AJAX :\n  ┌──────────────────────────────────────────────────────────────┐\n  │ Chargement  → GET /ajax_inputs&nocache=xxx                   │\n  │               Réponse XML : <DHCP> <IPA>..<IPD> <MSR*>      │\n  │                             <GAT*> <LOG>                     │\n  │ Validation  → GET /ajax_outputs&DHCP=..&IPA=..&...          │\n  │               Réponse texte : message de confirmation        │\n  └──────────────────────────────────────────────────────────────┘\n\n  FONCTIONNALITÉ FLÈCHES :\n  Chaque octet IP dispose de de","ConfIP_original.htm":"<!DOCTYPE HTML>\n<!--     Commande Bouton WEB       --> \n<!--     Version : CSS et JS v2    --> \n<!--     fait par Gontier Julien   -->\n   \n<!--     Debut de la page HTML     --> \n<html>\n  <head>\n  <!--     Entete de la page HTML  --> \n  <!--<form enctype=\"multipart/form-data\" action=\"ConfIP_SSID.html\" method=\"POST\" id=\"sample\" class=\"sample\" accept-charset=\"UTF-8\">-->\n    \n    <!--     Titre de la page WEB - sur le navigateur     -->\n    <title>Prise IP Configuration IP <\/title>\n    \n\t<link rel=\"shortcut icon\" type=\"image/png\" href=\"http://eg.com/favicon.ico\">\n\t<meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <!--     Style CSS - Mise en forme de la page      -->  \n  <style>\n    * {\n      margin: 0;\n      padding: 0;\n      text-align: center;\n      font-family:Arial, \\\"Trebuchet MS\\\", Helvetica, sans-serif;\n      transition: max-width 0.","index_original.htm":"<!DOCTYPE html>\n<!--\n  ============================================================\n  FICHIER  : index.htm\n  PROJET   : Arduino Commande WEB\n  AUTEUR   : Gontier Julien\n  VERSION  : CSS et JS v3 — AJAX voyant LED\n\n  CONTRAINTE ARDUINO :\n  L'Arduino ne peut servir qu'UN SEUL fichier par requête.\n  Tout le HTML, CSS et JavaScript doit être dans CE fichier.\n\n  FONCTIONNEMENT :\n  - Clic \"Allumer la LED\"   → GET /?BoutonON   → Arduino allume LED\n  - Clic \"Eteindre la LED\"  → GET /?BoutonOFF  → Arduino éteint LED\n  - AJAX toutes les 5s   → GET /ajax_inputs?led&nocache=xxx\n                           Réponse XML Arduino :\n                             <?xml version=\"1.0\"?>\n                             <inputs><LED>1<\/LED><\/inputs>\n                           Le voyant se met à jour sans rechargement.\n  ============================================================\n-->\n\n<html>\n  <head>\n\n<!-- ========"},"hr":"######################################################################################################################"};
+  var $ = function (id) { return document.getElementById(id); };
+  var out = $('out'), screen = $('screen'), form = $('cmd'), input = $('in'), chipsEl = $('chips');
+
+  /* ====================== utilitaires ====================== */
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function fmtDate(d) { return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear(); }
+  function fmtTime(d) { return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+  function fmtFat(d) { return fmtDate(d) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function rnd(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
+  function cp(o) { return JSON.parse(JSON.stringify(o)); }
+  function ipArr(s) {
+    var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(s).trim());
+    if (!m) return null;
+    var a = [+m[1], +m[2], +m[3], +m[4]];
+    for (var i = 0; i < 4; i++) if (a[i] > 255) return null;
+    return a;
+  }
+  function fromString(s) { var a = ipArr(s); return a ? a.join('.') : '0.0.0.0'; } // IPAddress::fromString : echec = 0.0.0.0
+  function hash(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function sameNet(a, b, m) {
+    var x = ipArr(a), y = ipArr(b), k = ipArr(m);
+    if (!x || !y || !k) return false;
+    for (var i = 0; i < 4; i++) if ((x[i] & k[i]) !== (y[i] & k[i])) return false;
+    return true;
+  }
+  function isPrivate(ip) {
+    var a = ipArr(ip); if (!a) return false;
+    return a[0] === 10 || (a[0] === 172 && a[1] >= 16 && a[1] <= 31) || (a[0] === 192 && a[1] === 168) || a[0] === 127;
+  }
+  function padR(t, w) { t = String(t); while (t.length < w) t += ' '; return t; }
+
+  /* ====================== etat de la carte ====================== */
+  var DEFC = {
+    name: 'PriseIP_UNO_R4', pass: 'changerLeMotDePasse', login: false, web: true, ftp: true, led: false,
+    mac: 'DE:AD:BE:EF:FE:B1', dhcp: false, ip: '192.168.0.10', mask: '255.255.255.0', gw: '192.168.0.254', port: 80,
+    loginWEB: false, lpw: 'dXNlcjpwYXNz', ftpLogin: 'arduino', ftpPass: 'arduino', logger: false, file: 'datalogger.csv'
+  };
+  var S = {
+    // EEPROM de la carte telle que sur les captures de l'utilisateur
+    eeprom: Object.assign(cp(DEFC), { ip: '192.168.0.15', gw: '192.168.0.253', mac: 'DE:AD:BE:EF:FE:B2' }),
+    conf: null,
+    net: { ip: '', mask: '', gw: '', port: 80, dhcpEtat: false, dns: '1.1.1.1' },
+    sdOk: true, wan: true,
+    mode: 'serial', gone: false, upAt: 0,
+    busy: false, hist: [], hi: 0, configs: {},
+    nbr: 30, prev: Date.now(), lastBoot: new Date(), dhcpIp: '192.168.0.' + rnd(40, 200), cliEcho: true
+  };
+  S.conf = cp(S.eeprom);
+
+  // Reglages du simulateur : ce que seule la vraie carte ou ton reseau decide
+  var ENV0 = { sd: 14832, cluster: 8192, ram: 17747, dhcpIp: '192.168.0.' + rnd(40, 200), dhcpGw: '192.168.0.254', google: '142.251.152.119',
+    comp: 'Apr  9 2026 : 21:14:03', lMin: 0, lMax: 3, wMin: 9, wMax: 38, loss: 0, up: '', down: '' };
+  var ENV = cp(ENV0);
+  function inList(list, ip) { return String(list).split(/[\s,;]+/).indexOf(ip) >= 0; }
+
+  var FILES = [
+    { d: '23/03/2022 21:09', size: 0, name: 'System Volume Information', dir: true },
+    { d: '27/03/2026 11:53', size: 67364, name: 'ConfIP.htm', partial: true },
+    { d: '24/02/2026 04:25', size: 11067, name: 'ConfIP_original.htm', partial: true },
+    { d: '24/02/2026 04:25', size: 24, name: 'data.csv', content: 'Date ;Heure ; Etat Led\r\n' },
+    { d: '17/03/2026 18:11', size: 415, name: 'datalogger.csv', content: DATA.csv },
+    { d: '24/02/2026 04:25', size: 24, name: 'datalogger_vierge.csv', content: 'Date ;Heure ; Etat Led\r\n' },
+    { d: '27/03/2026 12:08', size: 27172, name: 'index.htm', partial: true },
+    { d: '09/04/2026 21:14', size: 22153, name: 'index_original.htm', partial: true }
+  ];
+  FILES.forEach(function (f) { if (DATA.files[f.name]) f.content = DATA.files[f.name]; if (f.content != null && !f.partial) f.size = f.content.length; });
+  function findFile(n) {
+    n = String(n || '').toLowerCase();
+    for (var i = 0; i < FILES.length; i++) if (FILES[i].name.toLowerCase() === n) return i;
+    return -1;
+  }
+  function sdExists(n) { return S.sdOk && findFile(n) >= 0; }
+
+  /* ====================== terminal : ecriture avec sequences ANSI ====================== */
+  var cur = '', curLn = null, curSpan = null, curCls = null, mute = false;
+  function clsOf(esc) {
+    var p = esc.slice(2, -1);
+    if (/(^|;)4[01](;|$)/.test(p) && /(^|;)41(;|$)/.test(p)) return 'bad';
+    if (/^1;32/.test(p)) return 'h';
+    if (/^1;31/.test(p)) return 'r';
+    return '';
+  }
+  function mkLn() { curLn = document.createElement('div'); curLn.className = 'ln'; out.appendChild(curLn); curSpan = null; }
+  function addText(t) {
+    if (!t) return;
+    if (!curLn) mkLn();
+    if (!curSpan || curCls !== cur) {
+      curSpan = document.createElement('span');
+      if (cur) curSpan.className = cur;
+      curCls = cur; curLn.appendChild(curSpan);
+    }
+    curSpan.textContent += t;
+  }
+  function write(s) {
+    if (mute) return;
+    String(s).split(/(\x1b\[[0-9;]*m|\n)/).forEach(function (t) {
+      if (!t) return;
+      if (t === '\n') { if (!curLn) mkLn(); curLn = null; curSpan = null; }
+      else if (t.charAt(0) === '\x1b') cur = clsOf(t);
+      else addText(t.replace(/\r/g, ''));
+    });
+    screen.scrollTop = screen.scrollHeight;
+  }
+  function pr(s) { write(s == null ? '' : s); }
+  function pl(s) { write((s == null ? '' : s) + '\n'); }
+  function endLine() { curLn = null; curSpan = null; }
+  function clearScreen() { out.innerHTML = ''; curLn = null; curSpan = null; cur = ''; }
+  // sortie reservee au port Serie (Serial.print) : invisible en Telnet
+  function sp(s) { if (S.mode === 'serial') pl(s); }
+  function OK() { pr('[\x1b[1;32;40m  OK  \x1b[0;39;49m]  '); }
+  function FAILED() { pr('[\x1b[;37;41mFAILED\x1b[0;39;49m]  '); }
+  function VIDE() { pr('[      ]  '); }
+  var RED = '\x1b[1;31;40m', RST = '\x1b[0;39;49m', GRN = '\x1b[1;32;40m', BADC = '\x1b[;37;41m';
+  async function L(fn, d) { fn(); await sleep(d == null ? 30 : d); }
+
+  /* ====================== ecrans ====================== */
+  function infoVersion() { DATA.ver.forEach(function (l) { pl(l); }); }
+  function printMAC(m) { pr(m.toUpperCase()); }
+  function macIsDefault() { return S.conf.mac.toUpperCase() === DEFC.mac; }
+  function netValid(c) {
+    var ok = sameNet(c.ip, c.gw, c.mask);
+    var ip = ipArr(c.ip) || [0, 0, 0, 0], m = ipArr(c.mask) || [0, 0, 0, 0], g = ipArr(c.gw) || [0, 0, 0, 0];
+    return { ok: ok, bad: !ok || m[3] === 255 || ip[3] === g[3] || ip[3] === 0 || ip[3] === 255, maskBad: m[3] === 255, same: ip[3] === g[3], ipBad: ip[3] === 0 || ip[3] === 255 };
+  }
+  function ramFree() { pr("Memoire RAM disponible de l'arduino : " + ENV.ram + " byte\n"); }
+
+  function printScreen(full) {
+    var c = S.conf, n = S.net, now = new Date();
+    pl(); pl(GRN);
+    DATA.hdr.forEach(function (l) { pl(l); });
+    pl();
+    pl(RED); pl(' Status Service'); pl(RST);
+    pl('  - Nom du systeme. . . . . . . . . . . : ' + c.name);
+    pl('  - Etat Login cmdLine et Telnet. . . . : ' + (c.login ? 'ON' : 'OFF'));
+    pl('    * Password cmdLine et Telnet        : ' + c.pass);
+    pl();
+    pl('  - Etat LED. . . . . . . . . . . . . . : ' + (c.led ? 'ON' : 'OFF'));
+    pr('  - Carte Micro SD Partition Fichier. . : '); pl(S.sdOk ? 'ready' : BADC + ' OFF ' + RST);
+    pl('  - Datalogger. . . . . . . . . . . . . : ' + (c.logger ? 'ON' : 'OFF'));
+    pl('    * Nom Fichier en cours              : ' + c.file);
+    pl('  - Ethernet. . . . . . . . . . . . . . : ');
+    pl('    * Test DNS                          : ' + (S.wan ? 'Connexion a Internet OK' : 'Pas de connexion Internet : Verifier le Reseau et la passerelle'));
+    pl('  - Serveur FTP . . . . . . . . . . . . : ' + (c.ftp ? 'ON' : 'OFF'));
+    pl('    * Serveur FTP Login                 : ' + c.ftpLogin);
+    pl('    * Serveur FTP Password              : ' + c.ftpPass);
+    pl('  - Serveur WEB . . . . . . . . . . . . : ' + (c.web ? 'ON' : 'OFF'));
+    pl('    * Authentification                  : ' + (c.loginWEB ? 'ON' : 'OFF') + '  (Login et Password) du site WEB');
+    pl('    * Login:Password                    : ' + c.lpw + '  en Base 64');
+    pl(RED); pl(" Configuration en cours de la connexion Ethernet de l'Arduino UNO R4"); pl(RST);
+    pl('  - DHCP. . . . . . . . . . . . . . . . : ' + (n.dhcpEtat ? 'ON' : 'OFF'));
+    var v = netValid(c);
+    if (v.bad) { pl(BADC + "     ###     ATTENTION ERREUR !!! ###     : Erreur de configuration Reseau : Verifier les parametres reseau de l'Arduino UNO R4 " + RST); pl(); }
+    pl("  - L'adresse IP. . . . . . . . . . . . : " + n.ip);
+    pl('  - Le Masque de sous reseau (subnet) . : ' + n.mask);
+    pl('  - La Passerelle (gateway) . . . . . . : ' + n.gw);
+    pl('  - DNS . . . . . . . . . . . . . . . . : 1.1.1.1');
+    if (full) {
+      pl(RED); pl(' Configuration Reseau en RAM  ( Pour sauver la configuration en EEPROM : taper save )'); pl(RST);
+      pl('  - DHCP. . . . . . . . . . . . . . . . : ' + (c.dhcp ? 'ON' : 'OFF'));
+      pl("  - L'adresse IP. . . . . . . . . . . . : " + c.ip);
+      pl('  - Le Masque de sous reseau (subnet) . : ' + c.mask);
+      pl('  - La Passerelle (gateway) . . . . . . : ' + c.gw);
+      pr('  - MAC Address . . . . . . . . . . . . : '); printMAC(c.mac); pl();
+      if (macIsDefault()) { pl(BADC + "     ###     ATTENTION  !!! ###     : Il Faut changer l'adresse MAC de l'Arduino UNO R4 " + RST); pl(); }
+      pl('  - Serveur WEB : PORT. . . . . . . . . : ' + c.port);
+      var e = S.eeprom;
+      pl(RED); pl(" Configuration Reseau enregistre en EEPROM  ( Cette configuration n'est valide qu'apres un RESET : taper reset )"); pl(RST);
+      pl('  - DHCP. . . . . . . . . . . . . . . . : ' + (e.dhcp ? 'ON' : 'OFF'));
+      pl("  - L'adresse IP. . . . . . . . . . . . : " + e.ip);
+      pl('  - Le Masque de sous reseau (subnet) . : ' + e.mask);
+      pl('  - La Passerelle (gateway) . . . . . . : ' + e.gw);
+      pr('  - MAC address . . . . . . . . . . . . : '); printMAC(e.mac); pl();
+      pl('  - Serveur WEB : PORT. . . . . . . . . : ' + e.port);
+    }
+    pl(RED); pl(' Environnement'); pl(RST);
+    if (S.wan) {
+      pl('  - Time : ' + fmtTime(now));
+      pl('  - Date : ' + fmtDate(now));
+      pl('  - Date du dernier reboot : ' + fmtDate(S.lastBoot) + ' ' + fmtTime(S.lastBoot));
+    } else pl('  - WAN ERROR !! -- Serveur NTP (Real Time) : OFF !');
+    pr('  - '); ramFree();
+  }
+
+  function ddir() {
+    pl();
+    pl('####-----  INFO CARTE SD  -----');
+    var used = FILES.reduce(function (s, f) { return s + (f.dir ? 0 : f.size); }, 0);
+    pr('  Type de carte MicroSD : '); pl(S.sdOk ? 'SDHC/SDXC' : 'Inconnu');
+    pr('  Type FAT        : '); pl(S.sdOk ? 'FAT32' : 'Inconnu');
+    pl('  Taille totale   : ' + (S.sdOk ? ENV.sd : 0) + ' MB');
+    pl('  Taille utilisee : ' + (S.sdOk ? used : 0) + ' octets / ' + Math.floor((S.sdOk ? used : 0) / 1024) + ' Ko');
+    pl('  Cluster size    : ' + (S.sdOk ? ENV.cluster : 0) + ' octets');
+    pl();
+    pl('####-----  dir Fichiers SD Card  -----');
+    if (!S.sdOk) { pl("Impossible d'ouvrir le repertoire racine"); return; }
+    FILES.forEach(function (f) { pl('  ' + f.d + ' ' + String(f.size).padStart(10) + ' ' + f.name); });
+    pl();
+  }
+
+  function helpScreen() { write(DATA.help.replace(/\r/g, '')); }
+
+  function serialBanner() {
+    pl(GRN);
+    pl(' #############################################################');
+    pl(' ###  Prise IP  . . . . . . . . . . . .  Connexion Serial  ###');
+    pl(' ###  Arduino UNO R4 - Ethernet 2                   IoToS  ###');
+    pl(' #############################################################');
+    pl(RST); pl();
+    pl(' Si besoin : Dans PUTTY le menu ');
+    pl(' Connexion --> Serial decocher : Flow control : None');
+    pl(' - Serial Commande Line (cmdLine).. START  : OK !');
+    pl('   Taper help pour voir les commandes disponibles');
+    pl('   Taper print pour voir la configuration réseau');
+    pl();
+  }
+  function telnetBanner() {
+    pl('*****  Telnet Client connecte !!');
+    pl(GRN);
+    pl(' #############################################################');
+    pl(' ###  Prise IP  . . . . . . . . . . . .  Connexion Telnet  ###');
+    pl(' ###  Arduino UNO R4 - Ethernet 2                  IoToS   ###');
+    pl(' #############################################################');
+    pl(RST); pl();
+    pl(' Avec MobaXtern taper cli off pour eviter les doubles carateres');
+    pl(' Si besoin : Dans PUTTY le menu Telnet decocher');
+    pl(' Return key sends Telnet New Line instead of ^M');
+    pl(' - Serial Commande Line (cmdLine).. START  : OK !');
+    pl('   Taper help pour voir les commandes disponibles');
+    pl('   Taper print pour voir la configuration réseau');
+    pl();
+  }
+
+  /* ====================== demarrage (setup) ====================== */
+  async function boot(silent) {
+    setBusy(true);
+    S.booting = true;
+    S.gone = silent && S.mode === 'telnet';
+    mute = !!silent;
+    if (silent) await sleep(4500);
+    var d = silent ? 0 : 30;
+    S.conf = cp(S.eeprom);                       // LoadConfEEPROM
+    var c = S.conf;
+    S.lastBoot = new Date();
+    S.nbr = 30; S.prev = Date.now();
+
+    pl(DATA.hr);
+    infoVersion();
+    await L(function () { OK(); pl('## Boot IoToS pour Arduino UNO Rev 4  (setup run) ............... '); }, d);
+    await L(function () { VIDE(); pl('   Nom du Programme source ino : PriseIP_UNOR4_jsWEB_SD_FTP_LogCmdLine_IDE2_v72'); }, d);
+    await L(function () { OK(); pl('## Serial ok !'); }, d);
+    await L(function () { OK(); pr('## EEPROM Loading'); pl('EEPROM load : .......... OK !'); }, d);
+    await L(function () { OK(); pr('## PORT I/O Initialisation'); pl(); }, d);
+    await L(function () { OK(); pl('## SPI Initialisation'); }, d);
+    await L(function () { VIDE(); pl('## Test partition Fichiers SD : .......  '); }, d);
+    if (S.sdOk) {
+      await L(function () { OK(); pl('## Partition et fichiers sur Micro SD : OK !'); }, d);
+      await L(function () { VIDE(); pl('   FAT32 Les noms fichiers sont de type DOS etendu'); }, d);
+    } else {
+      await L(function () { FAILED(); pl('   - ERROR Erreur de Lecture de la partition Micro SD Card !'); }, d);
+      await L(function () { VIDE(); pl(BADC + '###     ATTENTION  !!! ###     : La carte Micro SD est absente ou mal formate !!! (FAT) ' + RST); }, d);
+      await L(function () { VIDE(); pl('    o Erreur SD. Code : 0x1'); }, d);
+      await L(function () { VIDE(); pl('    o Data            : 0xFF'); }, d);
+    }
+
+    // ---- Initialisation_Ethernet()
+    pl();
+    await L(function () { OK(); pl('## Initialisation Ethernet v2 : START ....... '); }, d);
+    await L(function () { OK(); pl('- MAC Address Physique du Module Ethernet v2 : DE:AD:BE:EF:FE:B1 '); }, d);
+    await L(function () { OK(); pr('- MAC Address actuelle du Module Ethernet v2 : '); printMAC(c.mac); pl(); }, d);
+    if (macIsDefault()) { pl('[      ]  ' + BADC + "###     ATTENTION  !!! ###     : Il Faut changer l'adresse MAC de l'Arduino UNO R4 " + RST); pl(); }
+    await L(function () { VIDE(); pl('## START Connexion Ethernet :'); }, d);
+    await L(function () { VIDE(); pl('   - Initialisation IP : Fixe ou DHCP ....'); }, d);
+    S.net = { ip: c.ip, mask: c.mask, gw: c.gw, port: c.port, dhcpEtat: false, dns: '1.1.1.1' };
+    if (!c.dhcp) {
+      await L(function () { OK(); pl('   - Configuration IP : IP Fixe'); }, d);
+      await L(function () { VIDE(); pl('   - Test de validite de l\'adresse IP <--> Passerelle en fonction du masque de sous reseau : '); }, d);
+      var v = netValid(c);
+      var good = '[ \x1b[1;32;40m OK \x1b[0;39;49m ]       o ';
+      var bad = '[\x1b[;37;41mFAILED\x1b[0;39;49m]       o ';
+      pl(v.ok ? good + 'IP et Passerelle OK !' : bad + "Attention Erreur de configuration Resau : L'IP et la passerelle ne sont pas sur le meme reseau !");
+      pl(!v.maskBad ? good + 'Subnet OK !' : bad + 'Attention Erreur de configuration Resau : Masque de sous reseau Erreur !');
+      pr(!v.same ? ' ' : bad + 'Attention Erreur de configuration Resau : IP et Passerelle Identique  !');
+      pr(' ');
+      if (v.bad) { S.net.dhcpEtat = true; pl('[      ]      ooo L\'Arduino UNO R4 Passe en DHCP'); }
+      await sleep(d);
+    } else {
+      pl('[      ]   - Configuration IP : DHCP'); pl();
+      await sleep(silent ? 0 : 500);
+      S.net.dhcpEtat = true;
+      S.net.ip = ENV.dhcpIp; S.net.mask = '255.255.255.0'; S.net.gw = ENV.dhcpGw;
+      OK(); pl('      Mode DHCP actif');
+    }
+    pl();
+    await L(function () { VIDE(); pl('## Satus Connexion : '); }, d);
+    await L(function () { OK(); pl('   W5500 detecte'); }, d);
+    await L(function () { OK(); pl('   Lien Ethernet actif'); }, d);
+    await L(function () { OK(); pl('   - IP      : ' + S.net.ip); }, d);
+    await L(function () { OK(); pl('   - subnet  : ' + S.net.mask); }, d);
+    await L(function () { OK(); pl('   - gateway : ' + S.net.gw); }, d);
+    await L(function () { OK(); pl('   - DNS     : 1.1.1.1'); }, d);
+    pl();
+    await L(function () { VIDE(); pl('## DNS Start....'); }, d);
+    await L(function () { VIDE(); pl('   - Test DNS : connexion www.google.fr : '); }, d);
+    if (S.wan) {
+      await L(function () { OK(); pl('     IP google : = ' + ENV.google + ''); }, d);
+      await L(function () { OK(); pl('     DNS OK !'); }, d);
+      pl();
+      var now = new Date();
+      await L(function () { OK(); pl('## Client NTP (Time) START .... OK'); }, d);
+      await L(function () { OK(); pl('   Time : ' + fmtTime(now)); }, d);
+      await L(function () { OK(); pl('   Date : ' + fmtDate(now)); }, d);
+    } else {
+      await L(function () { FAILED(); pl('   ERROR !!! DNS lookup failed'); }, d);
+      await L(function () { FAILED(); pl(BADC + '  ###     ATTENTION  !!! ###     : la connexion WAN ne fonctionne pas : Il Faut verifier les parametres reseau ' + RST); }, d);
+      pl();
+      await L(function () { FAILED(); pl('## WAN ERROR !!! NTP OFF ! '); }, d);
+    }
+    if (S.wan) { OK(); pl('## Internet ok '); } else { FAILED(); pl('## Internet Down '); }
+    await L(function () { OK(); pl('## Telnet Serveur : OK !'); }, d);
+    pl();
+    if (S.sdOk) {
+      await L(function () { OK(); pl('## FTP START : OK !'); }, d);
+      await L(function () { VIDE(); pl('   - Sur FileZilla : '); }, d);
+      await L(function () { VIDE(); pl('     Cliquer sur Fichier --> Gestion de sites --> Parametre de Transfert --> Limiter le nombre de connexion a 1'); }, d);
+    } else { FAILED(); pl('## Partition FS ERROR : FTP Down !!'); }
+    await L(function () { OK(); pr('## Serveur WEB START port : ' + c.port); pl('  ...... OK !'); }, d);
+    pl(); pl();
+    pl('## Telnet Commande Line : OK !');
+    pl('     Avec MobaXtern taper cli off pour eviter les doubles caracteres');
+    pl('     Putty ou Kitty configurer en Telnet port 23');
+    pl('     Si besoin : Dans PUTTY le menu Telnet decocher');
+    pl('     Return key sends Telnet New Line instead of ^M');
+    pl('## Serial Commande Line (CmdLine) START : OK !');
+    pl('     Putty ou Kitty configurer en serial : Flow control selectionner None');
+    pl();
+    pl('     Taper help pour voir les commandes disponibles');
+    pl('     Taper print pour voir la configuration reseau');
+    pl(GRN + '## -= IoToS =- System OK : Prise IP --> Start Loop()  ' + RST);
+    pl(); pl(); pl(); pl();
+    if (c.login) {
+      pl('## Activer ou desactiver Login CmdLine ou Telnet - Etat : ' + (c.login ? 'ON' : 'OFF'));
+      pl('     Entrer le code de connexion entrer la commande : login <motDePasse>');
+      pl('     pour acceder a la ligne de commande');
+      pl("     Le mot de passe actuel de l'acces au Telnet est : " + c.pass);
+      pl();
+      S.prev = Date.now(); S.nbr = 5;
+    }
+    mute = false;
+    if (S.mode === 'serial' && !silent) serialBanner();
+    S.upAt = Date.now();
+    S.booting = false;
+    syncWeb();
+    setBusy(false);
+  }
+
+  /* ====================== reseau simule ====================== */
+  function hostUp(ip) {
+    var a = ipArr(ip);
+    if (!a || ip === '0.0.0.0') return null;
+    if (ip === S.net.ip) return null;
+    if (inList(ENV.down, ip)) return null;
+    if (inList(ENV.up, ip)) return { ttl: 64, ms: rnd(ENV.lMin, ENV.lMax) };
+    if (sameNet(ip, S.net.ip, S.net.mask)) {
+      if (ip === S.net.gw) return { ttl: 64, ms: rnd(ENV.lMin, Math.max(ENV.lMin, ENV.lMax - 1)) };
+      return (hash(ip) % 4 === 0) ? null : { ttl: [64, 128, 64][hash(ip) % 3], ms: rnd(ENV.lMin, ENV.lMax) };
+    }
+    if (isPrivate(ip) || !S.wan) return null;
+    return { ttl: 40 + (hash(ip) % 80), ms: rnd(ENV.wMin, ENV.wMax) };
+  }
+  function resolveName(t) {
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(t)) return null;
+    var h = hash(t.toLowerCase());
+    return (20 + (h % 180)) + '.' + ((h >>> 8) % 250) + '.' + ((h >>> 16) % 250) + '.' + (1 + ((h >>> 24) % 250));
+  }
+
+  /* ====================== LED et datalogger ====================== */
+  function fileAppend(name, txt) {
+    var i = findFile(name);
+    if (i < 0) return;
+    var f = FILES[i];
+    f.content = (f.content || '') + txt; f.size = f.content.length; f.d = fmtFat(new Date());
+  }
+  function datalogger() {
+    var c = S.conf;
+    pl('*****  Enregistrement Data sur le fichier : ' + c.file);
+    if (!sdExists(c.file)) { pl("Le fichier n'existe pas !!"); return; }
+    var now = new Date();
+    pl('Date                   : ' + fmtDate(now));
+    pl('Heure                  : ' + fmtTime(now));
+    fileAppend(c.file, fmtDate(now) + ';' + fmtTime(now) + ';' + (c.led ? 'ON' : 'OFF') + '\r\n');
+    pl('Taille du fichier      : ' + FILES[findFile(c.file)].size);
+    pl('*******************************************'); pl(); pl();
+  }
+  function applyLed(v) {
+    S.conf.led = v;
+    syncWeb();
+  }
+
+  /* ====================== commandes ====================== */
+  var CMDS = [], LK = {};
+  function def(o) {
+    CMDS.push(o);
+    LK[o.n.toLowerCase()] = o;
+    (o.al || []).forEach(function (a) { LK[a.toLowerCase()] = o; });
+  }
+  function isOn(a) { return a === 'ON' || a === 'on'; }
+  function isOff(a) { return a === 'OFF' || a === 'off'; }
+  function swCmd(arg, onFn, offFn) {
+    if (isOn(arg)) onFn(); else if (isOff(arg)) offFn(); else pl('Commande syntaxe ERROR ');
+  }
+  function confirm() { pr('Commande confirmee : '); }
+  function confirmDots() { pr('Commande confirmee ........ '); }
+  function eepromPut() { S.eeprom = cp(S.conf); }
+
+  var CAT = {
+    sys: 'Système général', net: 'Telnet et réseau', log: 'Datalogger', sd: 'Fichiers de la carte SD (mini MS-DOS)',
+    web: 'Serveur WEB', ftp: 'Serveur FTP', ip: 'Configuration IP', ee: 'EEPROM et redémarrage'
+  };
+
+  def({ n: 'print', al: ['ifconfig', 'ipconfig', 'info', 'infoip', 'config', 'conf', 'p'], cat: 'sys', a: '', lock: true, d: "Affiche tout l'état : services, réseau en cours, configuration en RAM, en EEPROM, heure NTP et RAM libre.", fn: async function () { printScreen(true); } });
+  def({ n: 'help', al: ['man', '?', 'h'], cat: 'sys', a: '', lock: false, d: "Affiche l'aide de toutes les commandes.", fn: async function () { helpScreen(); } });
+  def({ n: 'name', cat: 'sys', a: '<texte>', lock: true, req: true, d: 'Change le nom du système (40 caractères). Gardé après redémarrage seulement avec save.', fn: async function (a) {
+    confirm(); S.conf.name = a.slice(0, 39); pl('Nouveau Nom Entreprise : ' + S.conf.name);
+  } });
+  def({ n: 'CLI', cat: 'sys', a: 'on | off', lock: true, req: true, d: "Echo du CLI. off pour MobaXterm (évite les lettres en double), on pour PuTTY.", fn: async function (a) {
+    confirm();
+    swCmd(a, function () { S.cliEcho = true; pl("CLI echo ON : PuTTY Telnet - remet l'echo normal"); },
+      function () { S.cliEcho = false; pl('CLI echo OFF : MobaXterm - evite le doublement des caracteres'); });
+  } });
+  def({ n: 'LED', cat: 'sys', a: 'on | off', lock: true, req: true, d: "Allume ou éteint la LED (broche D5). Si le datalogger est ON, une ligne est ajoutée au fichier.", fn: async function (a) {
+    confirm();
+    if (isOn(a)) { applyLed(true); pl('LED ON'); if (S.conf.logger) datalogger(); }
+    else if (isOff(a)) { applyLed(false); pl('LED OFF'); if (S.conf.logger) datalogger(); }
+    else pl('Commande syntaxe ERROR ');
+  } });
+  def({ n: 'WEB', cat: 'sys', a: 'on | off', lock: true, req: true, d: 'Active ou coupe le serveur WEB.', fn: async function (a) {
+    confirm();
+    swCmd(a, function () { pl('Serveur WEB ON'); S.conf.web = true; }, function () { pl('Serveur WEB OFF'); S.conf.web = false; });
+  } });
+  def({ n: 'FTP', cat: 'sys', a: 'on | off', lock: true, req: true, d: 'Active ou coupe le serveur FTP.', fn: async function (a) {
+    confirm();
+    swCmd(a, function () { pl('Serveur FTP ON'); S.conf.ftp = true; }, function () { pl('Serveur FTP OFF'); S.conf.ftp = false; });
+  } });
+  def({ n: 'ram', al: ['RAM'], cat: 'sys', a: '', lock: false, d: "Mémoire RAM disponible, en octets.", fn: async function () { ramFree(); } });
+  def({ n: 'version', cat: 'sys', a: '', lock: false, d: 'Bannière, version du noyau (100000066), nom du fichier source, date de compilation, auteur.', fn: async function () {
+    infoVersion();
+    pl('Programmation IDE Arduino 2.3.7');
+    pl('Version Kernel : 100000066');
+    pl('Nom du Programme source ino  : PriseIP_UNOR4_jsWEB_SD_FTP_LogCmdLine_IDE2_v72');
+    pl('Date et heure de compilation : ' + ENV.comp);
+    pl('Saint-Jean Colmar 68000 France');
+    pl('Biechy Jean-Marc 2026');
+    pl('radiobiechy@gmail.com');
+  } });
+  def({ n: 'debug', cat: 'sys', a: '', lock: false, d: "Texte de test pour vérifier l'affichage du terminal.", fn: async function () {
+    pl('DEBUG :'); pl('test');
+    pl(); pl('Version du Programme : IoTOS ---'); pl('Biechy - JeanMarc'); pl('BAC PRO CIEL - BTS // Institution SaintJean 68000 Colmar'); pl('radiobiechy@gmail.com');
+    pl('    linge en plus decale'); pl('ligne decale avec sache n slach r /n/r'); pl('ligne decale avec sache n  /n  '); pl('&e""\'\''); pl('ligne decale avec slach r /r'); pl('123456789'); pl(); pl();
+  } });
+  def({ n: 'test', cat: 'sys', a: '', lock: false, d: 'Fonction vide réservée aux essais du développeur.', fn: async function () { pl('TEST Fonction  :'); } });
+
+  def({ n: 'login', cat: 'net', a: 'on | off | <mot de passe>', lock: false, req: true, d: 'login on verrouille le CLI, login off le déverrouille, login <mot de passe> le déverrouille si le mot de passe est bon (sinon, un délai qui double s\'affiche).', fn: async function (a) {
+    var c = S.conf;
+    if (isOn(a)) {
+      c.login = true; S.prev = Date.now(); S.nbr = 5; eepromPut();
+      pr('System IoTOS verouille avec le mot de passe : '); pl(c.pass);
+    } else if (isOff(a)) {
+      c.login = false; eepromPut();
+      pr('System IoTOS deverouille avec le mot de passe : '); pl(c.pass);
+    } else if (a === c.pass) {
+      if (!c.login) { pl('IoTOS deja logue .... '); return; }
+      c.login = false; S.nbr = 5;
+      pl(GRN); pl('IoTOS UNLOCKED !!'); pl('Connexion autorisee...'); pl(RST);
+    } else {
+      pl('Connexion Telnet/Serial refusee : ' + BADC + ' mot de passe FAUX !!!!!  ' + RST);
+      if (S.nbr < 600000) S.nbr = S.nbr * 2;
+      var el = Math.floor((Date.now() - S.prev) / 1000);
+      if (S.nbr - el < 0) { pl('verifier votre mot de passe '); S.prev = Date.now(); return; }
+      var t = S.nbr - el;
+      pr('Nouvelle connexion possible dans .... ');
+      if (t <= 60) pl(t + ' Secondes');
+      else if (t <= 3600) pl(Math.floor(t / 60) + ' Minutes');
+      else if (t <= 86400) pl(Math.floor(t / 3600) + ' Heures');
+      else pl(Math.floor(t / 86400) + ' Jours');
+      S.prev = Date.now();
+    }
+  } });
+  def({ n: 'password', cat: 'net', a: '<mot de passe>', lock: true, req: true, d: 'Change le mot de passe du CLI (d\'usine : changerLeMotDePasse).', fn: async function (a) {
+    S.conf.pass = a.slice(0, 39); pl('Nouveau Password : ' + S.conf.pass);
+  } });
+  def({ n: 'exit', cat: 'net', a: '', lock: false, d: 'Ferme la session : réactive le login.', fn: async function () {
+    confirm();
+    var c = S.conf; c.login = true; S.prev = Date.now(); S.nbr = 5; eepromPut();
+    pr('System IoTOS verouille avec le mot de passe : '); pl(c.pass);
+    pl(' Login / Pass active');
+  } });
+  def({ n: 'ping', cat: 'net', a: '<IP>', lock: false, req: true, d: "4 paquets ICMP de 32 octets, un par seconde, avec statistiques. Il faut une adresse IP : un nom DNS n'est pas résolu.", fn: async function (a) {
+    confirm();
+    var ip = fromString(a);
+    pr("Envoi d'une requete 'Ping' "); pr(a); pl(' avec 32 octets de donnees :');
+    var host = hostUp(ip), min = 999999, max = 0, sum = 0, got = 0;
+    for (var i = 0; i < 4; i++) {
+      await sleep(host ? 250 : 700);
+      if (host && Math.random() * 100 >= ENV.loss) {
+        var t = i === 0 && host.ms < 9 ? host.ms + rnd(0, 2) : host.ms + rnd(0, 1);
+        pl('Reponse de ' + ip + ' : octets=32 temps=' + t + ' ms TTL=' + host.ttl);
+        got++; sum += t; if (t < min) min = t; if (t > max) max = t;
+      } else pl("Delai d'attente de la demande depasse.");
+      await sleep(host ? 750 : 300);
+    }
+    pl();
+    pl('Statistiques Ping pour ' + a + ' :');
+    pl('    Paquets : envoyes = 4, recus = ' + got + ', perdus = ' + (4 - got));
+    if (got > 0) {
+      pl('Duree approx. aller-retour en millisecondes :');
+      pl('    Minimum = ' + min + 'ms, Maximum = ' + max + 'ms, Moyenne = ' + Math.floor(sum / got) + 'ms');
+    }
+  } });
+  def({ n: 'tracert', cat: 'net', a: '<IP ou nom>', lock: false, req: true, d: 'Route vers une IP ou un nom DNS : TTL de 1 à 30, 3 essais par saut.', fn: async function (a) {
+    confirm();
+    var ip = ipArr(a) ? a : null;
+    if (!ip) {
+      var r = S.wan ? resolveName(a) : null;
+      if (!r) { pl('Erreur DNS'); return; }
+      ip = r;
+    }
+    pr('Traceroute vers '); pr(a); pr(' ['); pr(ip); pl(']');
+    var hops = [], reach = false;
+    if (ip === S.net.ip) { reach = false; }
+    else if (sameNet(ip, S.net.ip, S.net.mask)) { hops = [ip]; reach = !!hostUp(ip); }
+    else {
+      hops = [S.net.gw];
+      if (S.wan && !isPrivate(ip)) {
+        var n = 4 + (hash(ip) % 4);
+        for (var k = 1; k <= n; k++) {
+          var q = hash(ip + k);
+          hops.push(k === 1 ? '10.' + (q % 200) + '.' + ((q >>> 8) % 250) + '.1' : (20 + (q % 180)) + '.' + ((q >>> 8) % 250) + '.' + ((q >>> 16) % 250) + '.' + (1 + ((q >>> 24) % 250)));
+        }
+        hops.push(ip); reach = true;
+      }
+    }
+    for (var ttl = 1; ttl <= 30; ttl++) {
+      await sleep(260);
+      var hop = hops[ttl - 1], isT = hop === ip, line = padR(ttl, 4), ans = false;
+      if (hop && (!isT || reach)) {
+        var cells = [];
+        for (var j = 0; j < 3; j++) cells.push(!isT && Math.random() < 0.07 ? null : (1 + ttl * 2 + rnd(0, 3)));
+        if (cells.every(function (x) { return x === null; })) cells[1] = 2 + ttl * 2;
+        cells.forEach(function (x) { line += padR(x === null ? '*' : x + ' ms', 10); });
+        ans = true;
+      } else line += padR('*', 10) + padR('*', 10) + padR('*', 10);
+      if (ans) {
+        pl(line + '  ' + hop);
+        if (isT) { pl('Trace complete.'); break; }
+      } else pl(line + "  Delai d'attente depasse.");
+    }
+    pl();
+  } });
+  def({ n: 'netstat', cat: 'net', a: '', lock: true, d: 'Tableau des 8 sockets du W5500 : mode, état, ports et adresses.', fn: async function () {
+    confirm(); pl();
+    pl(padR('Sock', 5) + padR('Mode', 7) + padR('Status', 14) + padR('LocalIP', 16) + padR('LocalPort', 11) + padR('RemoteIP', 16) + padR('RemotePort', 11));
+    var ip = S.net.ip, c = S.conf, pc = '192.168.0.171';
+    var rows = [
+      [0, 'UDP', 'UDP', 1337, '85.199.214.102', 123],
+      [1, 'TCP', 'LISTEN', 23, '1.1.1.1', 53],
+      c.ftp && S.sdOk ? [2, 'TCP', 'ESTABLISHED', 21, pc, 50875] : [2, '---', 'CLOSED', 0, '', 0],
+      c.ftp && S.sdOk ? [3, 'TCP', 'CLOSED', 50009, pc, 50876] : [3, '---', 'CLOSED', 0, '', 0],
+      [4, 'TCP', 'LISTEN', S.net.port, pc, 50869],
+      c.ftp && S.sdOk ? [5, 'TCP', 'LISTEN', 21, pc, 50870] : [5, '---', 'CLOSED', 0, '', 0],
+      c.ftp && S.sdOk ? [6, 'TCP', 'LISTEN', 50009, '', 0] : [6, '---', 'CLOSED', 0, '', 0],
+      [7, '---', 'CLOSED', 0, '', 0]
+    ];
+    rows.forEach(function (r) {
+      pl(padR(r[0], 5) + padR(r[1], 7) + padR(r[2], 14) + padR(ip, 16) + padR(r[3], 11) + padR(r[4] || '-', 16) + padR(r[4] ? r[5] : '-', 11));
+    });
+    pl();
+  } });
+
+  def({ n: 'datalogger', cat: 'log', a: 'on | off', lock: true, req: true, d: "Active l'enregistrement des ON/OFF de la LED dans le fichier choisi.", fn: async function (a) {
+    confirm();
+    swCmd(a, function () { pl('Datalogger est ON'); S.conf.logger = true; }, function () { pl('Datalogger est OFF'); S.conf.logger = false; });
+  } });
+  def({ n: 'create', cat: 'log', a: '<nom.ext>', lock: true, req: true, d: "Crée un fichier avec l'en-tête Excel « Date ; Heure ; Etat LED ». S'il existe, ajoute l'en-tête à la fin.", fn: async function (a) {
+    confirm();
+    if (!S.sdOk) { pl("Impossible d'ouvrir le fichier pour ecriture."); return; }
+    var hdr = 'Date ; Heure ; Etat LED\n', i = findFile(a);
+    if (i < 0) FILES.push({ d: fmtFat(new Date()), size: hdr.length, name: a, content: hdr });
+    else { FILES[i].content = (FILES[i].content || '') + hdr; FILES[i].size += hdr.length; FILES[i].d = fmtFat(new Date()); }
+    pr('Fichier cree : '); pl(a);
+    ddir();
+  } });
+  def({ n: 'select', cat: 'log', a: '<nom.ext>', lock: true, req: true, d: 'Choisit le fichier utilisé par le datalogger et par edit (sans vérifier qu\'il existe).', fn: async function (a) {
+    confirm(); S.conf.file = a.slice(0, 39);
+    pr('Le Fichier en cours pour le Datalogger est : '); pl(S.conf.file);
+  } });
+
+  def({ n: 'dir', al: ['ls'], cat: 'sd', a: '', lock: true, d: 'Infos de la carte (type, FAT, tailles) puis liste des fichiers : date, heure, taille, nom.', fn: async function () { ddir(); } });
+  def({ n: 'rename', cat: 'sd', a: '<ancien> <nouveau>', lock: true, req: true, d: 'Renomme un fichier (refuse si le nouveau nom existe déjà).', fn: async function (a) {
+    pl('Commande confirmee ........ ');
+    var t = a.split(/ +/).filter(Boolean);
+    if (!t.length) { pl('Erreur Syntaxe: rename ancien (espace) nouveau'); return; }
+    if (t.length < 2) { pl('Nouveau nom manquant !'); return; }
+    pr(' Ancien nom : '); pl(t[0]); pr(' Nouveau nom : '); pl(t[1]);
+    var i = findFile(t[0]);
+    if (!sdExists(t[0])) { pl("Le fichier source n'existe pas !"); return; }
+    if (sdExists(t[1])) { pl('Erreur : le fichier destination existe deja !'); return; }
+    FILES[i].name = t[1]; pl('Renommage OK');
+  } });
+  def({ n: 'del', cat: 'sd', a: '<nom>', lock: true, d: 'Supprime un fichier.', fn: async function (a) {
+    confirmDots();
+    if (!sdExists(a)) { pl("Le fichier n'existe pas !!"); return; }
+    var i = findFile(a);
+    if (FILES[i].dir) { pl('Erreur suppression fichier'); pr('Code erreur SD : '); pl('0'); return; }
+    var nm = a; FILES.splice(i, 1);
+    pr('Fichier Supprime : '); pl(nm);
+  } });
+  function typeFile(a) {
+    confirmDots();
+    pr('Lecture du fichier en cours : '); pl(a);
+    if (!sdExists(a)) { pl("Le fichier n'existe pas !!"); return; }
+    var f = FILES[findFile(a)];
+    pr('Taille du fichier : '); pl(String(f.size)); pl();
+    var txt = f.content == null ? '' : f.content;
+    pr(txt.replace(/\r/g, ''));
+    if (f.partial) { pl(); pl('[... suite non affichée dans le simulateur : ' + f.size + ' octets au total ...]'); }
+    endLine(); pl(); pl();
+  }
+  def({ n: 'type', cat: 'sd', a: '<nom>', lock: true, req: true, d: "Affiche le contenu d'un fichier texte (taille, puis contenu).", fn: async function (a) { typeFile(a); } });
+  def({ n: 'edit', cat: 'sd', a: '<texte>', lock: true, req: true, d: "Écrit le texte au début du fichier choisi avec select (il n'est pas vidé), puis l'affiche. Limite : environ 1024 caractères.", fn: async function (a) {
+    confirm(); pr('Ouverture du Fichier : '); pl(S.conf.file);
+    if (!sdExists(S.conf.file)) { pr("Impossible d'ouvrir le fichier pour ecriture."); endLine(); return; }
+    var f = FILES[findFile(S.conf.file)];
+    if (!f.partial) { var old = f.content || ''; f.content = a + old.slice(a.length); f.size = f.content.length; }
+    f.d = fmtFat(new Date());
+    typeFile(S.conf.file);
+  } });
+  def({ n: 'copy', al: ['copie'], cat: 'sd', a: '<source> <destination>', lock: true, req: true, d: 'Copie un fichier (écrase la destination si elle existe).', fn: async function (a) {
+    pl('Commande confirmee ........ ');
+    var t = a.split(/ +/).filter(Boolean);
+    if (!t.length) { pl('Erreur syntaxe'); return; }
+    if (t.length < 2) { pl('Nom fichier copie manquant'); return; }
+    pl('Routine copie fichier...');
+    pr('Fichier source : '); pl(t[0]);
+    pr('Fichier destination : '); pl(t[1]);
+    if (!sdExists(t[0])) { pl('Fichier original absent : copie abort'); return; }
+    if (sdExists(t[1])) { FILES.splice(findFile(t[1]), 1); pl('Fichier destination existant : ecrasement'); }
+    var src = FILES[findFile(t[0])];
+    var blocks = Math.max(1, Math.ceil(src.size / 1024));
+    for (var i = 0; i < blocks; i++) { pr('...'); await sleep(40); }
+    pl(' END');
+    var n = cp(src); n.name = t[1]; n.d = fmtFat(new Date()); FILES.push(n);
+    pl('Fin de copie fichier');
+  } });
+
+  def({ n: 'loginWEB', cat: 'web', a: 'on | off', lock: true, req: true, d: "Active ou coupe le login et mot de passe du site WEB.", fn: async function (a) {
+    confirm();
+    swCmd(a, function () { pl('Login site WEB : active OK '); S.conf.loginWEB = true; }, function () { pl('Login site WEB : desactive OFF ! '); S.conf.loginWEB = false; });
+  } });
+  def({ n: 'login-passWEB', cat: 'web', a: '<Base64>', lock: true, req: true, d: "Définit Login:Password du site, encodé en Base64 (dXNlcjpwYXNz = user:pass).", fn: async function (a) {
+    S.conf.lpw = a.slice(0, 39); pr('Nouveau Login:Password (en Base 64 crypte ) OK ! : '); pl(S.conf.lpw);
+  } });
+  def({ n: 'loginFTP', cat: 'ftp', a: '<login>', lock: true, req: true, d: 'Change le login FTP (d\'usine : arduino).', fn: async function (a) {
+    confirm(); S.conf.ftpLogin = a.slice(0, 39); pr('Nouveau Login FTP : '); pl(S.conf.ftpLogin);
+  } });
+  def({ n: 'passwordFTP', cat: 'ftp', a: '<mot de passe>', lock: true, req: true, d: 'Change le mot de passe FTP (d\'usine : arduino).', fn: async function (a) {
+    confirm(); S.conf.ftpPass = a.slice(0, 39); pr('Nouveau Password FTP : '); pl(S.conf.ftpPass);
+  } });
+
+  def({ n: 'mac', cat: 'ip', a: 'DE:AD:BE:EF:FE:ED', lock: true, req: true, d: 'Change la MAC (6 octets en hexadécimal séparés par : ou -). Chaque carte du réseau doit avoir la sienne.', fn: async function (a) {
+    var o = [];
+    for (var i = 0; i < 6; i++) {
+      var n = parseInt(a.substr(i * 3, 2), 16);
+      o.push(isNaN(n) ? '00' : ('0' + n.toString(16)).slice(-2).toUpperCase());
+    }
+    S.conf.mac = o.join(':');
+    pl('Commande confirmee : OK ! ');
+  } });
+  def({ n: 'dhcp', cat: 'ip', a: 'on | off', lock: true, req: true, d: "Bascule IP fixe / DHCP. Effectif après save puis reset.", fn: async function (a) {
+    confirm();
+    swCmd(a, function () { pl('DHCP : active OK '); S.conf.dhcp = true; }, function () { pl('DHCP : desactive OFF ! '); S.conf.dhcp = false; });
+  } });
+  def({ n: 'ip', al: ['IP'], cat: 'ip', a: '<IP>', lock: true, req: true, d: "Adresse IP fixe. Une IP mal écrite devient 0.0.0.0. Effectif après save puis reset.", fn: async function (a) {
+    S.conf.ip = fromString(a); pr('Commande confirmee : IP '); pl(S.conf.ip);
+  } });
+  def({ n: 'subnet', cat: 'ip', a: '<masque>', lock: true, req: true, d: 'Masque de sous-réseau. Effectif après save puis reset.', fn: async function (a) {
+    S.conf.mask = fromString(a); pr('Commande confirmee : Masque de sous reseau '); pl(S.conf.mask);
+  } });
+  def({ n: 'gateway', al: ['passerelle', 'pass'], cat: 'ip', a: '<IP>', lock: true, req: true, d: "Passerelle. Attention : « pass » est un synonyme de gateway, pas le mot de passe.", fn: async function (a) {
+    S.conf.gw = fromString(a); pr('Commande confirmee : Passerelle '); pl(S.conf.gw);
+  } });
+  def({ n: 'port', cat: 'ip', a: '<1 à 65535>', lock: true, req: true, d: 'Port du serveur WEB (80 par défaut). Effectif après save puis reset.', fn: async function (a) {
+    var p = parseInt(a, 10);
+    if (p < 65536 && p > 0) S.conf.port = p; else pl('ERREUR valeur ');
+    pr('Commande confirmee : Port du serveur WEB : '); pl(S.conf.port);
+  } });
+
+  def({ n: 'save', cat: 'ee', a: '', lock: false, d: 'Écrit toute la configuration (RAM) dans l\'EEPROM.', fn: async function () { eepromPut(); await sleep(200); pl('EEPROM Save : ......... OK ! '); } });
+  def({ n: 'reload', cat: 'ee', a: '', lock: false, d: "Relit l'EEPROM dans la RAM, sans redémarrer.", fn: async function () { S.conf = cp(S.eeprom); pl('EEPROM load : .......... OK !'); } });
+  def({ n: 'defaults', cat: 'ee', a: '', lock: false, d: "Remet les valeurs d'usine (192.168.0.10…) en RAM et en EEPROM, puis affiche l'état.", fn: async function () {
+    S.conf = cp(DEFC);
+    pl("Restauration de la Configuration de base suite a une corruption des DATA de l'EEPROM ");
+    eepromPut(); await sleep(200); pl('EEPROM Save : ......... OK ! ');
+    printScreen(false);
+  } });
+  def({ n: 'SaveConf', cat: 'ee', a: '<nom>', lock: true, req: true, d: 'Sauve la configuration complète (297 octets) dans un fichier de la carte SD.', fn: async function (a) {
+    confirm();
+    if (!S.sdOk) { pl('Impossible de cree le fichier en ecriture.'); return; }
+    var i = findFile(a), now = fmtFat(new Date());
+    S.configs[a.toLowerCase()] = cp(S.conf);
+    if (i < 0) FILES.push({ d: now, size: 297, name: a, content: '(fichier binaire : structure conf_t, 297 octets)', bin: true });
+    else { FILES[i].size = 297; FILES[i].d = now; FILES[i].content = '(fichier binaire : structure conf_t, 297 octets)'; FILES[i].bin = true; FILES[i].partial = true; }
+    pr('Fichier cree avec la configuration Reseau sauvegarde : '); pl(a);
+  } });
+  def({ n: 'LoadConf', cat: 'ee', a: '<nom>', lock: true, req: true, d: "Charge une configuration enregistrée par SaveConf, puis l'écrit aussi dans l'EEPROM.", fn: async function (a) {
+    confirm();
+    if (!sdExists(a)) { pl('Impossible de lire le fichier en lecture'); return; }
+    var c = S.configs[a.toLowerCase()];
+    if (!c) { pl("ERROR !! Mismatch : Le fichier de configuration n'est pas du meme format que la version actuelle du programme"); pl("La configuration n'est pas charge"); return; }
+    S.conf = cp(c); eepromPut();
+    pr('Fichier lu avec la configuration Reseau : '); pl(a);
+    pl('Faire les commandes save puis reset pour les prendre en compte et redemarrer');
+  } });
+  def({ n: 'reset', al: ['restart', 'reboot'], cat: 'ee', a: '', lock: false, d: "Redémarre l'Arduino : la configuration de l'EEPROM est rechargée. Une connexion Telnet est coupée.", fn: async function () { await doReset(); } });
+
+  var ORDER = [];
+  ['print', 'ifconfig', 'ipconfig', 'info', 'infoip', 'config', 'conf', 'p', 'help', 'man', '?', 'h', 'save', 'reset', 'restart', 'reboot', 'login', 'password', 'exit', 'name', 'LED', 'WEB', 'FTP', 'RAM', 'ping', 'netstat', 'tracert', 'datalogger', 'create', 'select', 'dir', 'ls', 'rename', 'del', 'edit', 'type', 'copy', 'copie', 'loginFTP', 'passwordFTP', 'loginWEB', 'login-passWEB', 'mac', 'dhcp', 'ip', 'IP', 'subnet', 'gateway', 'passerelle', 'pass', 'port', 'reload', 'defaults', 'SaveConf', 'LoadConf', 'CLI', 'version', 'debug', 'test'].forEach(function (n) { ORDER.push(n); });
+
+  async function doReset() {
+    pr('Reboot Now .....');
+    if (S.mode === 'telnet') {
+      pl(' Attention la connexion Telnet va etre coupe !!!!');
+      pl(" Vous devez vous reconnecter Mais cela peut prendre du temps (connexion Ethernet de l'Arduino R4) ");
+    }
+    await sleep(500);
+    if (S.mode === 'telnet') {
+      $('lost').hidden = false;
+      await boot(true);
+    } else {
+      await boot(false);
+    }
+  }
+
+  /* ====================== execution ====================== */
+  function setBusy(b) {
+    S.busy = b;
+    input.disabled = b || S.gone;
+    var btns = chipsEl.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = b || S.gone;
+  }
+  async function run(raw, kb) {
+    var text = raw.trim();
+    if (S.busy || S.gone) return;
+    endLine(); cur = '';
+    pl('> ' + raw);
+    hPos = -1; hSaved = null; tabIdx = -1;
+    if (raw === '') return;
+    // historique de la bibliotheque CmdLine : 10 entrees, pas de doublon consecutif
+    if (!S.hist.length || S.hist[S.hist.length - 1] !== raw) {
+      S.hist.push(raw);
+      if (S.hist.length > HIST_MAX) S.hist.shift();
+    }
+    var m = /^(\S+)\s*([\s\S]*)$/.exec(text);
+    if (/^\s/.test(raw) || !m) m = ['', '', ''];
+    var e = m[1] ? LK[m[1].toLowerCase()] : null;
+    setBusy(true);
+    try {
+      if (!e) pl('Invalid command');
+      else if (e.lock && S.conf.login) pl('Acces Refuse');
+      else if (e.req && !m[2]) { pl('Operande absent : commande annulee'); pl(); }
+      else await e.fn(m[2]);
+    } finally {
+      endLine(); cur = '';
+      setBusy(false);
+      if (kb && !input.disabled) input.focus();
+      screen.scrollTop = screen.scrollHeight;
+    }
+  }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = input.value; input.value = '';
+    run(v, true);
+  });
+  /* Edition de ligne : meme logique que CmdLineTelnet_UNOR4 (v20) */
+  var HIST_MAX = 10, hPos = -1, hSaved = null;
+  var tabIdx = -1, tabLen = 0, tabCnt = 0;
+  input.maxLength = 127;
+  function setLine(v) { input.value = v; try { input.setSelectionRange(v.length, v.length); } catch (x) {} }
+  function pfx(a, b, n) { return a.slice(0, n).toLowerCase() === b.slice(0, n).toLowerCase() && b.length >= n; }
+  input.addEventListener('input', function () { tabIdx = -1; });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); tabIdx = -1;
+      if (!S.hist.length) return;
+      if (e.key === 'ArrowUp') {
+        if (hPos === -1) hSaved = input.value;
+        if (hPos < S.hist.length - 1) hPos++; else return;
+      } else {
+        if (hPos === -1) return;
+        hPos--;
+      }
+      setLine(hPos === -1 ? (hSaved || '') : S.hist[S.hist.length - 1 - hPos]);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      var v = input.value;
+      if (tabIdx === -1) {
+        var cp = input.selectionStart == null ? v.length : input.selectionStart;
+        tabLen = cp;
+        var hits = ORDER.filter(function (n) { return pfx(v, n, tabLen); });
+        tabCnt = hits.length;
+        if (!tabCnt) return;                       // la carte envoie un BEL (bip)
+        if (tabCnt === 1) { setLine(hits[0] + ' '); return; }
+        endLine(); pl('> ' + v);
+        hits.forEach(function (n) { pl('  ' + n); });
+        setLine(hits[0]);
+        tabIdx = 1;
+      } else {
+        var hits2 = ORDER.filter(function (n) { return pfx(v, n, tabLen); });
+        if (hits2.length) setLine(hits2[tabIdx % tabCnt] || hits2[0]);
+        tabIdx++;
+      }
+    }
+  });
+  ['print', 'help', 'dir', 'LED on', 'LED off', 'netstat', 'ping 192.168.0.253', 'tracert 8.8.8.8', 'datalogger on', 'type datalogger.csv', 'version'].forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = c;
+    b.addEventListener('click', function () { run(c, false); });
+    chipsEl.appendChild(b);
+  });
+  var clr = document.createElement('button');
+  clr.type = 'button'; clr.className = 'chip ghost'; clr.textContent = "Effacer l'écran";
+  clr.addEventListener('click', function () { clearScreen(); });
+  chipsEl.appendChild(clr);
+
+  /* ====================== connexion Serie / Telnet ====================== */
+  function setMode(m) {
+    if (S.busy && !S.gone) return;
+    if (S.mode === m && !S.gone) return;
+    S.mode = m;
+    $('mSerial').setAttribute('aria-pressed', m === 'serial' ? 'true' : 'false');
+    $('mTelnet').setAttribute('aria-pressed', m === 'telnet' ? 'true' : 'false');
+    S.gone = false; $('lost').hidden = true;
+    clearScreen();
+    if (m === 'telnet') telnetBanner(); else serialBanner();
+    setBusy(false);
+    input.focus();
+  }
+  $('mSerial').addEventListener('click', function () { setMode('serial'); });
+  $('mTelnet').addEventListener('click', function () {
+    if (S.gone && S.busy) { $('lost').hidden = false; return; }
+    if (S.mode === 'telnet' && !S.gone) return;
+    setMode('telnet');
+  });
+
+  /* ====================== reglages de la carte simulee ====================== */
+  (function () {
+    function num(el, k, lo, hi) {
+      var v = el.value.trim(), ok = /^\d+$/.test(v) && +v >= lo && +v <= hi;
+      el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+      if (ok) ENV[k] = +v;
+      return ok;
+    }
+    function ip(el, k) {
+      var ok = !!ipArr(el.value);
+      el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+      if (ok) ENV[k] = ipArr(el.value).join('.');
+    }
+    function ipList(el, k) {
+      var parts = el.value.split(/[\s,;]+/).filter(Boolean), ok = parts.every(function (x) { return !!ipArr(x); });
+      el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+      if (ok) ENV[k] = parts.join(', ');
+    }
+    var f = [
+      ['eSd', function (e) { num(e, 'sd', 1, 2000000); }], ['eCl', function (e) { num(e, 'cluster', 512, 262144); }],
+      ['eRam', function (e) { num(e, 'ram', 0, 262144); }], ['eLoss', function (e) { num(e, 'loss', 0, 100); }],
+      ['eDhcp', function (e) { ip(e, 'dhcpIp'); }], ['eDgw', function (e) { ip(e, 'dhcpGw'); }], ['eGoo', function (e) { ip(e, 'google'); }],
+      ['eUp', function (e) { ipList(e, 'up'); }], ['eDown', function (e) { ipList(e, 'down'); }],
+      ['eComp', function (e) { ENV.comp = e.value; }]
+    ];
+    f.forEach(function (x) { var el = $(x[0]); el.addEventListener('input', function () { x[1](el); }); });
+    function range(a, b, kLo, kHi) {
+      function go() {
+        var A = $(a), B = $(b), okA = /^\d+$/.test(A.value.trim()), okB = /^\d+$/.test(B.value.trim());
+        A.setAttribute('aria-invalid', okA ? 'false' : 'true'); B.setAttribute('aria-invalid', okB ? 'false' : 'true');
+        if (okA && okB) { var x = Math.min(+A.value, 500), y = Math.min(+B.value, 500); ENV[kLo] = Math.min(x, y); ENV[kHi] = Math.max(x, y); }
+      }
+      $(a).addEventListener('input', go); $(b).addEventListener('input', go);
+    }
+    range('eLmin', 'eLmax', 'lMin', 'lMax'); range('eWmin', 'eWmax', 'wMin', 'wMax');
+    function fill() {
+      $('eSd').value = ENV.sd; $('eCl').value = ENV.cluster; $('eRam').value = ENV.ram; $('eLoss').value = ENV.loss;
+      $('eDhcp').value = ENV.dhcpIp; $('eDgw').value = ENV.dhcpGw; $('eGoo').value = ENV.google; $('eComp').value = ENV.comp;
+      $('eLmin').value = ENV.lMin; $('eLmax').value = ENV.lMax; $('eWmin').value = ENV.wMin; $('eWmax').value = ENV.wMax;
+      $('eUp').value = ENV.up; $('eDown').value = ENV.down;
+      document.querySelectorAll('#envp input').forEach(function (i) { i.setAttribute('aria-invalid', 'false'); });
+    }
+    $('eReset').addEventListener('click', function () { var keep = ENV.dhcpIp; ENV = cp(ENV0); ENV.dhcpIp = ENV0.dhcpIp; fill(); });
+    fill();
+  })();
+
+  $('oSd').addEventListener('change', function () { S.sdOk = this.checked; });
+  $('oWan').addEventListener('change', function () { S.wan = this.checked; });
+
+  /* ====================== onglets ====================== */
+  var TABS = ['T', 'W', 'G'];
+  function showTab(w) {
+    TABS.forEach(function (t) {
+      var on = t === w;
+      $('pane' + t).hidden = !on;
+      $('tab' + t).setAttribute('aria-selected', on ? 'true' : 'false');
+      $('tab' + t).tabIndex = on ? 0 : -1;
+    });
+    if (w === 'W') webOpen();
+    else webClose();
+    if (w === 'T') input.focus();
+  }
+  TABS.forEach(function (t, i) {
+    $('tab' + t).addEventListener('click', function () { showTab(t); });
+    $('tab' + t).addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        var to = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+        showTab(to); $('tab' + to).focus();
+      }
+    });
+  });
+
+  /* ====================== page web de la carte ====================== */
+  var W = { view: 'led', cred: '', open: false, start: Date.now(), timer: 0, pending: null };
+  var POLL = 10000;
+  function hostLabel() { return S.net.ip + (S.net.port !== 80 ? ':' + S.net.port : ''); }
+  function httpHeaders(path, extra) {
+    var l = ['GET ' + path + ' HTTP/1.1', 'Host: ' + hostLabel(), 'Connection: keep-alive'];
+    if (W.cred) l.push('Authorization: Basic ' + W.cred);
+    l.push('Accept: ' + (extra || 'text/html,*/*;q=0.8'));
+    return l;
+  }
+  // Journal du serveur WEB sur le port Serie
+  function srvLog(path, accept, body) {
+    if (S.mode !== 'serial') { body(); return; }
+    endLine();
+    pl(); pl('ooooo Serveur WEB : Nouveau Client connecte ....');
+    httpHeaders(path, accept).forEach(function (h) { pl(h); });
+    pl();
+    if (body() === 'notail') return;
+    pl('ooooo Client Deconnecte (Fin boucle)');
+    pl('-------------------------------------------------------');
+    pl();
+    endLine();
+  }
+  function sendFileLog(name) {
+    var i = findFile(name), f = FILES[i];
+    if (!S.sdOk || i < 0) { sp('oo Fichier introuvable sur SD'); return false; }
+    sp(''); pr('Envoie Page WEB : '); pl(name);
+    var dots = ''; for (var k = 0; k < Math.ceil(f.size / 512); k++) dots += '...';
+    sp(dots); sp('Fin envoi fichier');
+    return true;
+  }
+  function needAuth() { return S.conf.loginWEB && W.cred !== S.conf.lpw; }
+
+  // Envoie une requete a la carte. Retourne 'noresp', '401' ou 'ok'.
+  function httpReq(path, opt) {
+    opt = opt || {};
+    if (!S.conf.web) return 'noresp';
+    if (S.gone || S.booting) return 'noresp';
+    var status = 'ok';
+    srvLog(path, opt.accept, function () {
+      if (needAuth()) { status = '401'; return; }
+      sp(''); sp('');
+      if (path.indexOf('ajax_outputs') >= 0) { status = 'cfg'; if (opt.apply) opt.apply(); return 'notail'; }
+      if (path.indexOf('/?BoutonON') === 0) { S.conf.led = true; sp('LED est ON'); if (S.conf.logger) datalogger(); }
+      if (path.indexOf('/?BoutonOFF') === 0) { S.conf.led = false; sp('LED est OFF'); if (S.conf.logger) datalogger(); }
+      if (path.indexOf('ajax_inputs?led') >= 0) { sp('oo Envoie Page WEB : AJAX : LED Status'); status = 'xml'; return; }
+      if (path.indexOf('ajax_inputs') >= 0) { sp('oo Envoie Page WEB : AJAX : Emission'); status = 'xml'; return; }
+      if (path.indexOf('favicon.ico') >= 0) { sp('oo Requete favicon.ico -> 404 (ignore)'); status = '404'; return; }
+      if (path.indexOf('ConfIP.htm') >= 0) {
+        sp('Routine Envoie Page WEB : ConfigIP.htm'); sp(''); sp('oo Envoie Entete de la page WEB');
+        status = sendFileLog('ConfIP.htm') ? 'ok' : 'empty'; return;
+      }
+      sp('oo Routine Envoie Page WEB : index.html'); sp(''); sp('oo Envoie Entete de la page WEB');
+      status = sendFileLog('index.htm') ? 'ok' : 'empty';
+    });
+    return status;
+  }
+
+  function showOnly(id) {
+    ['viewLed', 'viewConf', 'viewErr'].forEach(function (v) { $(v).hidden = v !== id; });
+  }
+  function setView(v) { W.view = v; paintWeb(); }
+  function paintWeb() {
+    $('bUrl').textContent = hostLabel() + (W.view === 'conf' ? '/ConfIP.htm' : '');
+    if (W.view === 'err') { showOnly('viewErr'); $('bTitle').textContent = hostLabel(); }
+    else if (W.view === 'conf') { showOnly('viewConf'); $('bTitle').textContent = 'Arduino — Configuration IP'; }
+    else { showOnly('viewLed'); $('bTitle').textContent = 'Arduino — Commande WEB'; }
+    $('wState').classList.toggle('on', S.conf.led);
+    $('wVal').textContent = S.conf.led ? 'ALLUMÉE' : 'ÉTEINTE';
+  }
+  function syncWeb() { if (W.open) paintWeb(); }
+  function errPage(kind) {
+    W.view = 'err';
+    if (kind === 'noresp') {
+      $('errT').textContent = 'Cette page ne fonctionne pas';
+      $('errP').textContent = hostLabel() + " n'a envoyé aucune donnée (le serveur WEB de la carte est OFF ou la carte redémarre).";
+      $('errC').textContent = 'ERR_EMPTY_RESPONSE';
+    } else if (kind === '401') {
+      $('errT').textContent = 'Authentication failed';
+      $('errP').textContent = 'Le serveur a répondu « 401 Unauthorized » : identifiant ou mot de passe incorrect.';
+      $('errC').textContent = 'HTTP 401 — WWW-Authenticate: Basic realm="Secure"';
+    } else {
+      $('errT').textContent = 'Page vide';
+      $('errP').textContent = "La carte a répondu 200 mais le fichier n'existe pas sur la carte SD : le navigateur n'affiche rien.";
+      $('errC').textContent = 'oo Fichier introuvable sur SD';
+    }
+    paintWeb();
+  }
+  function askAuth(then) {
+    $('dlgHost').textContent = hostLabel();
+    $('dlgE').textContent = '';
+    $('dlgU').value = ''; $('dlgP').value = '';
+    $('dlgBack').hidden = false;
+    W.pending = then;
+    $('dlgU').focus();
+  }
+  $('dlg').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var b;
+    try { b = btoa($('dlgU').value + ':' + $('dlgP').value); } catch (x) { b = ''; }
+    W.cred = b;
+    $('dlgBack').hidden = true;
+    var t = W.pending; W.pending = null;
+    if (t) t();
+  });
+  $('dlgCancel').addEventListener('click', function () {
+    $('dlgBack').hidden = true; W.pending = null;
+    W.cred = '';
+    httpReq('/', {});   // la requete sans identifiants echoue en 401
+    errPage('401');
+  });
+
+  // charge une page (navigation) ; retry apres saisie des identifiants
+  function navigate(path, after) {
+    var r = httpReq(path, {});
+    if (r === 'noresp') { errPage('noresp'); return; }
+    if (r === '401') { askAuth(function () { navigate(path, after); }); return; }
+    if (r === '404') return;
+    if (r === 'empty') { errPage('empty'); return; }
+    if (after) after();
+  }
+  function loadLed(path) {
+    navigate(path || '/', function () {
+      W.view = 'led'; paintWeb();
+      $('wLoaded').textContent = 'Chargé à ' + fmtTime(new Date());
+      W.start = Date.now();
+    });
+  }
+  function webOpen() {
+    W.open = true;
+    if (!W.timer) W.timer = setInterval(tickWeb, 150);
+    if (W.view === 'err' || !S.conf.web) { W.view = 'led'; }
+    loadLed('/');
+  }
+  function webClose() { W.open = false; }
+  function tickWeb() {
+    if (!W.open || W.view !== 'led' || !$('dlgBack').hidden) return;
+    var el = Date.now() - W.start;
+    if (el >= POLL) {
+      W.start = Date.now(); el = 0;
+      var r = httpReq('/ajax_inputs?led&nocache=' + Math.random().toFixed(6), { accept: '*/*' });
+      if (r === 'noresp') { errPage('noresp'); return; }
+      if (r === '401') { askAuth(function () { loadLed('/'); }); return; }
+      $('wState').classList.toggle('on', S.conf.led);
+      $('wVal').textContent = S.conf.led ? 'ALLUMÉE' : 'ÉTEINTE';
+    }
+    $('wBar').style.width = (el / POLL * 100) + '%';
+    $('wRef').textContent = 'Actu dans ' + Math.max(1, Math.ceil((POLL - el) / 1000)) + 's';
+  }
+  $('bOn').addEventListener('click', function () { loadLed('/?BoutonON'); });
+  $('bOff').addEventListener('click', function () { loadLed('/?BoutonOFF'); });
+
+  var F = null, refreshers = [];
+  function octets(box, key, label) {
+    box.innerHTML = '';
+    var els = [];
+    for (var i = 0; i < 4; i++) {
+      (function (i) {
+        var o = document.createElement('div'); o.className = 'oct';
+        var up = document.createElement('button'); up.type = 'button'; up.textContent = '▲'; up.setAttribute('aria-label', label + ' octet ' + (i + 1) + ' plus');
+        var val = document.createElement('div'); val.className = 'ov';
+        var dn = document.createElement('button'); dn.type = 'button'; dn.textContent = '▼'; dn.setAttribute('aria-label', label + ' octet ' + (i + 1) + ' moins');
+        function refresh() {
+          val.textContent = F[key][i];
+          var dh = F.mode === 'dhcp';
+          up.disabled = dh || F[key][i] >= 255;
+          dn.disabled = dh || F[key][i] <= 0;
+        }
+        up.addEventListener('click', function () { if (F[key][i] < 255) { F[key][i]++; refresh(); } });
+        dn.addEventListener('click', function () { if (F[key][i] > 0) { F[key][i]--; refresh(); } });
+        o.appendChild(up); o.appendChild(val); o.appendChild(dn);
+        box.appendChild(o);
+        els.push(refresh);
+        if (i < 3) { var d = document.createElement('span'); d.className = 'dot'; d.textContent = '.'; box.appendChild(d); }
+      })(i);
+    }
+    return function () { els.forEach(function (f) { f(); }); };
+  }
+  function openConf() {
+    navigate('/ConfIP.htm', function () {
+      // la page demande ensuite l'etat courant en AJAX
+      httpReq('/ajax_inputs&nocache=' + Math.random().toFixed(6), { accept: '*/*' });
+      var c = S.conf;
+      F = { mode: c.dhcp ? 'dhcp' : 'static', ip: c.ip.split('.').map(Number), mask: c.mask.split('.').map(Number), gw: c.gw.split('.').map(Number) };
+      $('fMode').value = F.mode;
+      $('fAuth').value = c.loginWEB ? 'on' : 'off';
+      refreshers = [octets($('oIp'), 'ip', 'Adresse IP'), octets($('oMask'), 'mask', 'Masque'), octets($('oGw'), 'gw', 'Passerelle')];
+      refreshers.forEach(function (f) { f(); });
+      $('confForm').hidden = false; $('confDone').hidden = true;
+      $('bSave').disabled = false;
+      setView('conf');
+    });
+  }
+  $('fMode').addEventListener('change', function () { F.mode = this.value; refreshers.forEach(function (f) { f(); }); });
+  $('bConf').addEventListener('click', openConf);
+  $('bBack').addEventListener('click', function () { loadLed('/'); });
+  $('bSave').addEventListener('click', async function () {
+    $('bSave').disabled = true;
+    var q = '/ajax_outputs&DHCP=' + (F.mode === 'dhcp' ? 1 : 0) +
+      '&IPA=' + F.ip[0] + '&IPB=' + F.ip[1] + '&IPC=' + F.ip[2] + '&IPD=' + F.ip[3] +
+      '&MSRA=' + F.mask[0] + '&MSRB=' + F.mask[1] + '&MSRC=' + F.mask[2] + '&MSRD=' + F.mask[3] +
+      '&GATA=' + F.gw[0] + '&GATB=' + F.gw[1] + '&GATC=' + F.gw[2] + '&GATD=' + F.gw[3] +
+      '&LOG=' + ($('fAuth').value === 'on' ? 1 : 0) + '&nocache=' + Math.random().toFixed(6);
+    function apply() {
+      var c = S.conf;
+      c.dhcp = F.mode === 'dhcp'; c.ip = F.ip.join('.'); c.mask = F.mask.join('.'); c.gw = F.gw.join('.');
+      c.loginWEB = $('fAuth').value === 'on';
+      // PrintConf("1") puis SaveConfEEPROM, comme dans ServeurWEB.h
+      if (S.mode === 'serial') {
+        printScreen(true);
+        pl('Enregistrement de la configuration IP en EEPROM : Ok!'); pl();
+      }
+      eepromPut();
+      var p = document.createElement('div');
+      p.innerHTML = 'Configuration Enregistre<br>L\'Arduino UNO R4 est accessible dans quelques instant a l\'adresse IP : <b></b><br><br>Reboot : Now ...............<br><br>Attendre 5 secondes';
+      p.querySelector('b').textContent = c.dhcp ? 'DHCP OK !' : c.ip;
+      $('confMsg').innerHTML = ''; $('confMsg').appendChild(p);
+      $('confForm').hidden = true; $('confDone').hidden = false;
+      sp('------- RESET Arduino UNO R4  !!!! -------'); sp('');
+    }
+    var r = httpReq(q, { accept: '*/*', apply: apply });
+    if (r === '401') { askAuth(function () { $('bSave').click(); }); $('bSave').disabled = false; return; }
+    if (r === 'noresp') { errPage('noresp'); return; }
+    await sleep(900);
+    await doReset();
+    await sleep(600);
+    loadLed('/');
+  });
+
+  /* ====================== guide : tableau des commandes ====================== */
+  function buildGuide() {
+    var host = $('cmdTables'), order = ['sys', 'net', 'log', 'sd', 'web', 'ftp', 'ip', 'ee'];
+    order.forEach(function (k) {
+      var list = CMDS.filter(function (c) { return c.cat === k; });
+      var h = document.createElement('h3'); h.textContent = CAT[k]; h.className = 'cat';
+      var box = document.createElement('div'); box.className = 'tbl cat';
+      var t = '<table><thead><tr><th>Commande</th><th>Argument</th><th>Ce qu\'elle fait</th><th></th></tr></thead><tbody>';
+      list.forEach(function (c) {
+        var al = (c.al || []).filter(function (x) { return x.toLowerCase() !== c.n.toLowerCase(); });
+        var ex = c.a ? '' : c.n;
+        t += '<tr data-s="' + (c.n + ' ' + al.join(' ') + ' ' + c.d).toLowerCase().replace(/"/g, '') + '"><td class="m"><b>' + esc(c.n) + '</b>' +
+          (al.length ? '<br><span style="color:var(--muted)">aussi : ' + esc(al.join(', ')) + '</span>' : '') + '</td>' +
+          '<td class="m">' + esc(c.a || '—') + '</td>' +
+          '<td>' + esc(c.d) + (c.lock ? ' <span class="tag lock">verrouillable</span>' : '') + '</td>' +
+          '<td>' + (ex ? '<button class="tryit" type="button" data-c="' + esc(ex) + '">essayer</button>' : '') + '</td></tr>';
+      });
+      t += '</tbody></table>';
+      box.innerHTML = t;
+      host.appendChild(h); host.appendChild(box);
+    });
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.tryit') : null;
+      if (!b) return;
+      var c = b.getAttribute('data-c');
+      showTab('T');
+      run(c, false);
+    });
+    $('cmdSearch').addEventListener('input', function () {
+      var q = this.value.trim().toLowerCase();
+      var heads = host.querySelectorAll('h3.cat'), boxes = host.querySelectorAll('div.cat');
+      for (var i = 0; i < boxes.length; i++) {
+        var rows = boxes[i].querySelectorAll('tbody tr'), shown = 0;
+        for (var j = 0; j < rows.length; j++) {
+          var hit = !q || rows[j].getAttribute('data-s').indexOf(q) >= 0;
+          rows[j].hidden = !hit; if (hit) shown++;
+        }
+        boxes[i].hidden = !shown; heads[i].hidden = !shown;
+      }
+    });
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  // les liens du sommaire defilent sans casser l'onglet
+  document.querySelectorAll('.toc a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var t = document.getElementById(a.getAttribute('href').slice(1));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+
+  window.__iotos = { run: run, S: S, files: FILES };
+  buildGuide();
+  boot(false);
+})();
+
+</script>
