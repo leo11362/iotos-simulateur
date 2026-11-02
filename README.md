@@ -30,6 +30,8 @@ Le code du simulateur et la rédaction du guide ont été réalisés avec l'aide
 
 IoToS est l'œuvre de **Jean-Marc Biechy**, sous licence GNU LGPL v2.1 : [iotos.dsmynas.org](http://iotos.dsmynas.org/). Ce dépôt ne contient pas le firmware d'origine, seulement une reproduction indépendante de son comportement.
 
+Ce simulateur reproduit des messages et un comportement issus d'IoToS : il est donc distribué sous la même licence, **GNU LGPL v2.1** (voir le fichier [LICENSE](LICENSE)).
+
 ## Utiliser
 
 Ouvrir le site ci-dessus, ou télécharger `index.html` et l'ouvrir dans un navigateur : c'est un fichier unique, sans installation.
