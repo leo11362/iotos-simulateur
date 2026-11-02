@@ -256,12 +256,30 @@ footer { color: var(--muted); font-size: 13px; max-width: 96ch; }
   .win-btns { gap: 14px; }
   .wbody { padding: 18px 14px 14px; }
 }
+
+.demo-start { margin-top: 14px; font: 600 15px var(--f-body); color: #fff; background: var(--accent); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+:root[data-theme="dark"] .demo-start { color: #06121f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .demo-start { color: #06121f; } }
+.demo-start:hover { filter: brightness(1.08); }
+.demo-start:focus-visible, .demo-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.demo-bar { position: fixed; z-index: 60; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); margin-inline: auto; max-width: 760px; background: var(--surface); color: var(--fg); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.28); }
+.demo-bar .dt { font-weight: 600; font-size: 14px; margin: 0 0 4px; }
+.demo-bar .dx { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.demo-bar .db { display: flex; flex-wrap: wrap; gap: 8px; }
+.demo-bar button { font: 600 14px var(--f-body); border-radius: 7px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.demo-bar button.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .demo-bar button.pri { color: #06121f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .demo-bar button.pri { color: #06121f; } }
+.demo-bar button:disabled { opacity: .5; cursor: default; }
+body.demoing { padding-bottom: 210px; }
+body.demoing .chips, body.demoing .conn { pointer-events: none; opacity: .55; }
 </style>
 
 <div class="page">
   <header>
     <h1>Io<span>T</span>oS</h1>
     <p class="sub">Le micro-OS pour Arduino UNO R4, tel qu'il s'affiche : démarrage, commandes, page web de la carte, et un guide qui explique comment tout fonctionne.</p>
+    <button type="button" class="demo-start" id="demoStart">▶ Démo guidée (environ 1 minute)</button>
   </header>
 
   <div class="notice">
@@ -780,6 +798,16 @@ Date ;Heure ; Etat Led
   <footer>Essaie : <code>print</code>, <code>dir</code>, <code>LED on</code>, puis l'onglet « Page web de la carte » pour voir la LED changer et les requêtes arriver dans le terminal. Pour changer l'IP : <code>ip 192.168.0.2</code>, <code>save</code>, <code>reset</code>.</footer>
 </div>
 
+
+<div class="demo-bar" id="demoBar" role="region" aria-label="Démo guidée" aria-live="polite" hidden>
+  <p class="dt" id="demoTitle"></p>
+  <p class="dx" id="demoText"></p>
+  <div class="db">
+    <button type="button" class="pri" id="demoNext">Suivant ▸</button>
+    <button type="button" id="demoAuto" aria-pressed="false">Lecture auto ▶</button>
+    <button type="button" id="demoQuit">Quitter la démo</button>
+  </div>
+</div>
 <script>
 (function () {
   'use strict';
@@ -1992,6 +2020,145 @@ Date ;Heure ; Etat Led
       if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
   });
+
+  /* ====================== demo guidee ====================== */
+  var DEMO = { on: false, i: 0, auto: false, busy: false, snap: null, snapNet: null, timer: 0 };
+  (function () {
+    var bar = $('demoBar'), tT = $('demoTitle'), tX = $('demoText'), bNext = $('demoNext'), bAuto = $('demoAuto'), bQuit = $('demoQuit');
+    var baseline = cp(S.eeprom);
+    function idle() {
+      return new Promise(function (res) {
+        (function chk() { if (!S.busy && !S.booting) res(); else setTimeout(chk, 80); })();
+      });
+    }
+    async function typeCmd(cmd) {
+      await idle();
+      input.readOnly = true;
+      input.value = '';
+      for (var k = 0; k < cmd.length; k++) {
+        if (!DEMO.on) return;
+        input.value += cmd.charAt(k);
+        await sleep(55);
+      }
+      await sleep(350);
+      input.value = '';
+      if (!DEMO.on) return;
+      await run(cmd, false);
+      await idle();
+    }
+    function click(id) { var b = $(id); if (b && !b.disabled) b.click(); }
+    var STEPS = [
+      { tab: 'T', title: 'Le démarrage de la carte',
+        text: "On redémarre la carte. Chaque ligne [ OK ] est une étape du setup : EEPROM, ports, SPI, carte SD, Ethernet, IP, serveurs, heure NTP.",
+        act: async function () {
+          S.sdOk = true; $('oSd').checked = true; S.wan = true; $('oWan').checked = true;
+          S.eeprom = cp(baseline);
+          await typeCmd('reset');
+        } },
+      { tab: 'T', title: 'La liste des commandes',
+        text: "help affiche toutes les commandes du shell. Dans le vrai IoToS, il y en a une quarantaine, rangées par thème.",
+        act: async function () { await typeCmd('help'); } },
+      { tab: 'T', title: "L'état complet de la carte",
+        text: "print montre les services actifs, le réseau en cours, la configuration en RAM et celle de l'EEPROM. C'est la commande à taper en premier quand quelque chose ne marche pas.",
+        act: async function () { await typeCmd('print'); } },
+      { tab: 'T', title: 'Allumer la LED',
+        text: "La commande LED on allume la LED de la carte. Remarque : c'est un changement en RAM, il n'est pas écrit dans l'EEPROM.",
+        act: async function () { await typeCmd('LED on'); } },
+      { tab: 'W', title: 'La page web de la carte',
+        text: "Même carte, vue par un navigateur. La page demande l'état de la LED toute seule toutes les 10 secondes : elle affiche ALLUMÉE, comme la commande de l'étape précédente.",
+        act: async function () { await sleep(1300); } },
+      { tab: 'W', title: 'Éteindre depuis la page web',
+        text: "Le bouton envoie la requête /?BoutonOFF à la carte. La page se recharge et la LED passe à ÉTEINTE.",
+        act: async function () { await sleep(500); click('bOff'); await sleep(900); } },
+      { tab: 'T', title: 'Ce que la carte a vu passer',
+        text: "Sur la liaison série, le serveur WEB journalise chaque requête : en-têtes HTTP, fichier envoyé depuis la SD, fin de connexion. Remonte dans le terminal pour les voir.",
+        act: async function () { await sleep(500); } },
+      { tab: 'T', title: "Changer l'adresse IP",
+        text: "Trois commandes : ip <adresse> modifie la RAM, save écrit dans l'EEPROM, reset redémarre pour appliquer. Sans save, la nouvelle IP serait perdue au redémarrage.",
+        act: async function () {
+          await typeCmd('ip 192.168.0.20');
+          await sleep(700);
+          await typeCmd('save');
+          await sleep(700);
+          await typeCmd('reset');
+        } },
+      { tab: 'T', title: 'Vérification',
+        text: "Après le redémarrage, print montre la nouvelle IP en réseau actif et dans l'EEPROM. Fin de la démo : à toi de jouer avec les boutons sous le terminal, le guide et les réglages.",
+        act: async function () { await typeCmd('print'); } }
+    ];
+    function show() {
+      var s = STEPS[DEMO.i];
+      tT.textContent = 'Démo guidée · étape ' + (DEMO.i + 1) + ' sur ' + STEPS.length + ' · ' + s.title;
+      tX.textContent = s.text;
+      var last = DEMO.i === STEPS.length - 1;
+      bNext.textContent = last ? 'Terminer' : 'Suivant ▸';
+    }
+    async function runStep() {
+      if (!DEMO.on || DEMO.busy) return;
+      DEMO.busy = true; bNext.disabled = true;
+      var s = STEPS[DEMO.i];
+      show();
+      showTab(s.tab);
+      try { await s.act(); } catch (e) {}
+      DEMO.busy = false; bNext.disabled = false;
+      screen.scrollTop = screen.scrollHeight;
+      if (DEMO.on && DEMO.auto) {
+        clearTimeout(DEMO.timer);
+        DEMO.timer = setTimeout(next, Math.max(3500, s.text.length * 45));
+      }
+    }
+    async function next() {
+      clearTimeout(DEMO.timer);
+      if (!DEMO.on || DEMO.busy) return;
+      if (DEMO.i >= STEPS.length - 1) { await quit(); return; }
+      DEMO.i++;
+      await runStep();
+    }
+    async function quit() {
+      if (!DEMO.on) return;
+      clearTimeout(DEMO.timer);
+      DEMO.on = false; DEMO.auto = false;
+      document.body.classList.remove('demoing');
+      bar.hidden = true;
+      input.readOnly = false;
+      input.value = '';
+      await idle();
+      // on remet la carte dans l'etat ou elle etait avant la demo
+      S.eeprom = cp(DEMO.snap);
+      showTab('T');
+      var was = S.net.ip;
+      S.conf = cp(S.eeprom);
+      if (S.mode === 'telnet') S.mode = 'serial';
+      clearScreen();
+      await doReset();
+    }
+    async function start() {
+      if (DEMO.on) return;
+      await idle();
+      DEMO.on = true; DEMO.i = 0; DEMO.auto = false; DEMO.busy = false;
+      DEMO.snap = cp(S.eeprom);
+      $('envp').open = false;
+      document.body.classList.add('demoing');
+      bar.hidden = false;
+      bAuto.setAttribute('aria-pressed', 'false'); bAuto.textContent = 'Lecture auto ▶';
+      if (S.mode === 'telnet' || S.gone) { S.mode = 'serial'; S.gone = false; $('lost').hidden = true;
+        $('mSerial').setAttribute('aria-pressed', 'true'); $('mTelnet').setAttribute('aria-pressed', 'false'); setBusy(false); }
+      clearScreen();
+      showTab('T');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await runStep();
+    }
+    bNext.addEventListener('click', next);
+    bQuit.addEventListener('click', quit);
+    bAuto.addEventListener('click', function () {
+      DEMO.auto = !DEMO.auto;
+      bAuto.setAttribute('aria-pressed', DEMO.auto ? 'true' : 'false');
+      bAuto.textContent = DEMO.auto ? 'Pause ❚❚' : 'Lecture auto ▶';
+      clearTimeout(DEMO.timer);
+      if (DEMO.auto && !DEMO.busy) DEMO.timer = setTimeout(next, 1500);
+    });
+    $('demoStart').addEventListener('click', start);
+  })();
 
   window.__iotos = { run: run, S: S, files: FILES };
   buildGuide();

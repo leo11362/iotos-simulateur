@@ -9,6 +9,7 @@ Simulateur web et guide d'**IoToS**, le micro-OS pour Arduino UNO R4 de Jean-Mar
 - **Terminal (KiTTY)** : le démarrage de la carte, l'aide, les 42 commandes, en Série ou en Telnet. Tab, historique et message « Invalid command » reprennent la bibliothèque CmdLine.
 - **Page web de la carte** : la commande de la LED (rafraîchie par AJAX) et la page de configuration IP, avec le login du site.
 - **Guide** : le matériel (avec schéma), le démarrage, les services, toutes les commandes, des pas à pas, la différence RAM / EEPROM / réseau actif, le dépannage, les pièges du code et des pistes d'amélioration.
+- **Démo guidée** : un bouton « ▶ Démo guidée » déroule en 9 étapes un scénario complet (démarrage, aide, LED, page web, changement d'IP), pas à pas ou en lecture automatique. La carte est remise dans son état d'origine à la fin.
 - **Réglages de la carte simulée** : taille de la carte SD, IP DHCP, temps de ping, paquets perdus, etc.
 
 ## Sources
