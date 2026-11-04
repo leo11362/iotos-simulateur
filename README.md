@@ -4,6 +4,16 @@ Simulateur web et guide d'**IoToS**, le micro-OS pour Arduino UNO R4 de Jean-Mar
 
 **Site : https://leo11362.github.io/iotos-simulateur/**
 
+![La démo guidée du simulateur IoToS](img/demo.gif)
+
+## Aperçu
+
+| Terminal (KiTTY) | Page web de la carte |
+| --- | --- |
+| ![Le terminal avec la commande print](img/terminal.png) | ![La page web de la carte avec la commande de la LED](img/page-web.png) |
+
+![Le guide IoToS](img/guide.png)
+
 ## Ce que contient la page
 
 - **Terminal (KiTTY)** : le démarrage de la carte, l'aide, les 42 commandes, en Série ou en Telnet. Tab, historique et message « Invalid command » reprennent la bibliothèque CmdLine.
