@@ -271,7 +271,9 @@ footer { color: var(--muted); font-size: 13px; max-width: 96ch; }
 :root[data-theme="dark"] .demo-bar button.pri { color: #06121f; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .demo-bar button.pri { color: #06121f; } }
 .demo-bar button:disabled { opacity: .5; cursor: default; }
-body.demoing { padding-bottom: 210px; }
+body.demoing { padding-bottom: calc(var(--bar-h, 200px) + 24px); }
+body.demoing .screen { height: min(620px, calc(100vh - var(--bar-h, 200px) - 90px)); min-height: 220px; }
+body.demoing .win, body.demoing .browser { scroll-margin-top: 10px; }
 body.demoing .chips, body.demoing .conn { pointer-events: none; opacity: .55; }
 </style>
 
@@ -2046,6 +2048,12 @@ Date ;Heure ; Etat Led
       await run(cmd, false);
       await idle();
     }
+    // amene le terminal (ou la page web) en haut de l'ecran, au-dessus de la bulle
+    function goView(tab) {
+      document.documentElement.style.setProperty('--bar-h', bar.offsetHeight + 'px');
+      var el = tab === 'W' ? $('browser') : $('screen').parentNode;
+      setTimeout(function () { if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+    }
     function click(id) { var b = $(id); if (b && !b.disabled) b.click(); }
     var STEPS = [
       { tab: 'T', title: 'Le démarrage de la carte',
@@ -2099,6 +2107,7 @@ Date ;Heure ; Etat Led
       var s = STEPS[DEMO.i];
       show();
       showTab(s.tab);
+      goView(s.tab);
       try { await s.act(); } catch (e) {}
       DEMO.busy = false; bNext.disabled = false;
       screen.scrollTop = screen.scrollHeight;
@@ -2145,7 +2154,6 @@ Date ;Heure ; Etat Led
         $('mSerial').setAttribute('aria-pressed', 'true'); $('mTelnet').setAttribute('aria-pressed', 'false'); setBusy(false); }
       clearScreen();
       showTab('T');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       await runStep();
     }
     bNext.addEventListener('click', next);
