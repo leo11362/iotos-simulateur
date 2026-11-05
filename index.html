@@ -431,6 +431,7 @@ body.demoing .chips, body.demoing .conn { pointer-events: none; opacity: .55; }
             <a href="#g-libs">Bibliothèques et licences</a>
             <a href="#g-simu">Ce que fait le simulateur</a>
             <a href="#g-apropos">À propos du projet</a>
+            <a href="#g-comment">Comment ce projet a été fait</a>
           </nav>
 
           <div class="prose">
@@ -764,7 +765,7 @@ Date ;Heure ; Etat Led
             <p><strong>Absent :</strong> le serveur FTP réel, l'écran LCD, le bouton matériel et tout ce qui touche au vrai réseau.</p>
 
             <h2 id="g-apropos">À propos du projet</h2>
-            <p>Projet personnel de Leo, élève de Terminale CIEL : faire <strong>voir</strong> le micro-OS IoToS dans un navigateur, sans carte Arduino sous la main. La page contient un terminal, la page web de la carte et ce guide.</p>
+            <p>Projet personnel de Léo Wadel, élève de Terminale CIEL : faire <strong>voir</strong> le micro-OS IoToS dans un navigateur, sans carte Arduino sous la main. La page contient un terminal, la page web de la carte et ce guide.</p>
             <h3>Démarche</h3>
             <ol class="steps">
               <li>Comprendre ce qu'est IoToS : un micro-OS pour Arduino UNO R4 écrit par Jean-Marc Biechy.</li>
@@ -790,6 +791,51 @@ Date ;Heure ; Etat Led
             <p>Le code du simulateur et la rédaction de ce guide ont été réalisés avec l'aide de <strong>Claude</strong>, une IA d'Anthropic, à partir des sources ci-dessus fournies par Leo. Les informations techniques viennent du code de Jean-Marc Biechy. Une IA peut se tromper : c'est pourquoi les approximations sont listées et pourquoi chaque comportement peut être vérifié dans le code d'IoToS.</p>
             <h3>Auteur d'IoToS et licence</h3>
             <p>IoToS est l'œuvre de <strong>Jean-Marc Biechy</strong> (GNU LGPL v2.1), <a href="http://iotos.dsmynas.org/" target="_blank" rel="noopener">iotos.dsmynas.org</a>. Ce simulateur est une reproduction indépendante de son comportement, sans le firmware d'origine.</p>
+
+            <h2 id="g-comment">Comment ce projet a été fait</h2>
+            <p>Cette fiche raconte la fabrication du simulateur, étape par étape, pour que chacun puisse juger le travail et le refaire. Elle a été rédigée par Léo Wadel. Le code a été écrit par une IA (Claude) à partir des sources d'IoToS fournies par Léo, puis vérifié et corrigé au fil des échanges.</p>
+
+            <h3>1. Le point de départ</h3>
+            <p>Léo a d'abord voulu savoir ce qu'est IoToS, puis a voulu le faire tourner dans un navigateur, sans carte. Il a fourni à l'IA le code complet de la version 72 (programme principal, Shell, serveur web, utilitaires, pilote Ethernet), la bibliothèque CmdLine v20 avec sa documentation, les pages web et fichiers de la carte SD, et des captures d'écran de la vraie carte.</p>
+
+            <h3>2. Le terminal, en premier</h3>
+            <p>Le terminal a été fait avant le reste. Chaque message de démarrage a été repris du code source, sans être inventé. Ensuite, la saisie a été alignée sur la bibliothèque CmdLine v20 : complétion avec la touche Tab (un bip, la liste des possibilités, puis le cycle), historique des 10 dernières commandes sans doublons consécutifs, message « Invalid command » pour une commande inconnue, et une limite de 127 caractères.</p>
+
+            <h3>3. Les extraits de vrai code</h3>
+            <p>Les textes du simulateur ne sont pas écrits à la main : un petit programme (<code>build.js</code>) lit les sources d'IoToS et en extrait les chaînes réelles dans un fichier de données (<code>data.json</code>). La page est ensuite assemblée à partir d'un gabarit. Ainsi, un message qui apparaît dans le simulateur existe bien dans le code d'origine.</p>
+
+            <h3>4. Les réglages de la carte simulée</h3>
+            <p>Les valeurs qui dépendent du matériel ou du réseau (carte SD, adresse IP, DHCP, passerelle, temps de <code>ping</code>, perte de paquets, date de compilation) ne peuvent pas être reproduites à l'identique. Elles sont donc regroupées dans un panneau de réglages, avec des valeurs par défaut plausibles. C'est le seul endroit où le simulateur s'écarte volontairement de la réalité.</p>
+
+            <h3>5. La page web de la carte</h3>
+            <p>La page web a été reconstituée à partir du code du serveur web : requêtes <code>/?BoutonON</code> et <code>/?BoutonOFF</code>, mise à jour de l'état de la LED toutes les 10 secondes, identifiant et mot de passe en Basic. Elle n'est pas le fichier <code>index.htm</code> réel de la carte, qui n'a pas encore été comparé ligne à ligne.</p>
+
+            <h3>6. Le guide</h3>
+            <p>Le guide a été écrit en partant du code, pas de mémoire : commandes, services, EEPROM, dépannage et pièges. Chaque section est relue face aux messages du simulateur. Léo a demandé des ajouts au fil de l'eau (schéma de câblage, dépannage, pistes d'amélioration, cette fiche), et chaque demande a été ajoutée comme une section séparée.</p>
+
+            <h3>7. La démo guidée</h3>
+            <p>La démo déroule neuf étapes : démarrage, aide, état de la carte, LED, page web, changement d'IP, sauvegarde, redémarrage et vérification. Elle a été testée dans un vrai navigateur, à la fois sur ordinateur et en largeur de téléphone, avec un parcours complet et une fermeture en cours de route, pour vérifier que la carte revient à son état d'origine.</p>
+
+            <h3>8. Vérifications</h3>
+            <ul>
+              <li>Tests automatiques dans un navigateur sans interface : démarrage, commandes, Tab, historique, réglages, page web, démo.</li>
+              <li>Relecture des messages face au code source fourni.</li>
+              <li>Les erreurs trouvées pendant le travail ont été corrigées et notées dans le journal des échanges (par exemple une étiquette qui cassait la mise en page des réglages, ou des lignes du dépannage mal formulées).</li>
+            </ul>
+
+            <h3>9. Ce qui n'a pas été fait</h3>
+            <ul>
+              <li>Aucune comparaison directe avec une vraie carte Arduino UNO R4 n'a encore été faite : tout est vérifié contre le code et les captures, pas contre le matériel.</li>
+              <li>L'IA peut se tromper : une erreur signalée par l'auteur ou un lecteur sera corrigée en priorité.</li>
+            </ul>
+
+            <h3>10. Comment refaire le même travail</h3>
+            <ol class="steps">
+              <li>Réunir les sources d'IoToS et de CmdLine, et les fournir à l'IA avec la consigne de reproduire le comportement du code, sans rien inventer.</li>
+              <li>Travailler par petites étapes : d'abord une seule partie (le terminal), la tester, puis passer à la suivante.</li>
+              <li>Garder une trace des messages extraits du code, pour pouvoir les vérifier.</li>
+              <li>Tester dans un navigateur à chaque étape, et relire le résultat face aux sources avant de continuer.</li>
+            </ol>
 
           </div>
         </div>

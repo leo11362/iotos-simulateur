@@ -6,6 +6,8 @@ Simulateur web et guide d'**IoToS**, le micro-OS pour Arduino UNO R4 de Jean-Mar
 
 ![La démo guidée du simulateur IoToS](img/demo.gif)
 
+Réalisé par **Léo Wadel** (Terminale CIEL). La fiche « Comment ce projet a été fait », dans le guide, détaille les étapes du travail.
+
 ## Aperçu
 
 | Terminal (KiTTY) | Page web de la carte |
